@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "qwen-mm-plugins-core": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "${QWEN_MM_PLUGINS_ROOT}[core]",
+        "qwen-mm-plugins-core"
+      ]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+diff --git a/services/webinfer/memory_summarizer.py b/services/webinfer/memory_summarizer.py
+--- a/services/webinfer/memory_summarizer.py
++++ b/services/webinfer/memory_summarizer.py
+@@ -372,15 +372,20 @@ class SummarizerModel:
+             extra_body["top_k"] = top_k
+         if repetition_penalty != 1.0:
+             extra_body["repetition_penalty"] = repetition_penalty
+-        response = client.chat.completions.create(
+-            model=model_name,
+-            messages=messages,
+-            max_tokens=max_tokens,
+-            temperature=temperature,
+-            top_p=top_p,
+-            presence_penalty=presence_penalty,
+-            extra_body=extra_body,
+-        )
++        import os as _os
++        if _os.environ.get("ADAPTER_OAI_STRICT"):
++            response = client.chat.completions.create(
++                model=model_name, messages=messages, max_tokens=max_tokens)
++        else:
++            response = client.chat.completions.create(
++                model=model_name,
++                messages=messages,
++                max_tokens=max_tokens,
++                temperature=temperature,
++                top_p=top_p,
++                presence_penalty=presence_penalty,
++                extra_body=extra_body,
++            )
+         return response.choices[0].message.content.strip() if response.choices else ""
+ 
+     def _get_tokenizer(self):

@@ -1,0 +1,14 @@
+# Scoring (ibench eval without a local judge) needs only the standard library and Pillow.
+pillow>=10.0
+
+# Local Hugging Face models and judges (ibench run --model <zoo name> / hf:..., --judge hf:...)
+torch>=2.0
+transformers>=4.50
+accelerate
+
+# Dataset download, YAML model configs
+huggingface_hub>=0.24
+pyyaml
+
+# Frame extraction calls an `ffmpeg` binary on PATH.
+# API models and API judges use the standard library; no provider SDK is needed.

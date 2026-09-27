@@ -1,0 +1,25 @@
+# data, model weights and results are never committed
+data/
+results/
+external/
+logs/
+*.mp4
+*.mkv
+*.webm
+*.safetensors
+*.bin
+
+# secrets: API keys live in environment variables only
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv*/
+.pytest_cache/
+.ipynb_checkpoints/

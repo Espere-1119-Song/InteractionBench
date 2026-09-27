@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "interactionbench"
+version = "1.0.0"
+description = "InteractionBench: a real-time interaction benchmark for streaming video systems"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pillow>=10.0"]
+
+[project.optional-dependencies]
+# local Hugging Face models and judges
+hf = ["torch>=2.0", "transformers>=4.50", "accelerate"]
+# dataset download and YAML model configs
+data = ["huggingface_hub>=0.24", "pyyaml"]
+dev = ["pytest"]
+
+[project.scripts]
+ibench = "interactionbench.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["interactionbench*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

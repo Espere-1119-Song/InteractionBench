@@ -1,0 +1,16 @@
+{
+  "my-finetuned-qwen": {
+    "adapter": "hf-vlm",
+    "repo": "/path/to/checkpoint",
+    "model_cls": "Qwen3VLForConditionalGeneration",
+    "image_style": "payload"
+  },
+  "my-local-server": {
+    "adapter": "api",
+    "model": "my-served-model-name",
+    "base_url": "http://127.0.0.1:8000/v1",
+    "api_key_env": "MY_SERVER_KEY",
+    "allow_empty_key": true,
+    "max_tokens_field": "max_tokens"
+  }
+}

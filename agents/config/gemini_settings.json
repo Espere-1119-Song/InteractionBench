@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "qwen-mm-plugins-core": {
+      "command": "uvx",
+      "args": ["--from", "${QWEN_MM_PLUGINS_ROOT}[core]", "qwen-mm-plugins-core"]
+    }
+  },
+  "excludeTools": ["run_shell_command", "web_fetch", "google_web_search",
+                    "write_file", "replace", "save_memory"]
+}

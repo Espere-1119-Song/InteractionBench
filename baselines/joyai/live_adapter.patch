@@ -1,0 +1,89 @@
+diff --git a/services/webinfer/live_adapter.py b/services/webinfer/live_adapter.py
+--- a/services/webinfer/live_adapter.py
++++ b/services/webinfer/live_adapter.py
+@@ -15,6 +15,19 @@ API servers:
+ from __future__ import annotations
+ 
+ import argparse
++
++# ADAPTER_OAI_STRICT=1: commercial OpenAI-compat endpoints (Anthropic/Gemini)
++# reject vLLM-only params (extra_body top_k/repetition_penalty/greedy) and
++# some sampling params outright (claude-sonnet-5 rejects temperature).
++# Strict mode keeps only max_tokens; sampling falls to provider defaults.
++import os as _os
++_OAI_STRICT = bool(_os.environ.get("ADAPTER_OAI_STRICT"))
++
++def _strict_kwargs(kw):
++    if not _OAI_STRICT:
++        return kw
++    return {"max_tokens": kw.get("max_tokens", 512)}
++
+ import asyncio
+ import base64
+ import copy
+@@ -1396,7 +1409,7 @@ class StreamingInferAdapter:
+         response = await client.chat.completions.create(
+             model=model_name,
+             messages=payload.get("messages") or [],
+-            **generation_kwargs,
++            **_strict_kwargs(generation_kwargs),
+         )
+         raw_text = response.choices[0].message.content if response.choices else ""
+         usage = response.usage.model_dump() if getattr(response, "usage", None) else None
+@@ -1595,6 +1608,9 @@ class StreamingInferAdapter:
+         system_prompt = self._resolve_system_prompt(payload)
+         if system_prompt:
+             messages = [{"role": "system", "content": system_prompt}] + messages
++        cap = _env_int("ADAPTER_MAX_IMAGES", 0)
++        if cap > 0:
++            messages = _cap_images(messages, cap)
+         return messages
+ 
+     def _resolve_system_prompt(self, payload: Optional[dict[str, Any]] = None) -> str:
+@@ -1627,7 +1643,7 @@ class StreamingInferAdapter:
+         response = await client.chat.completions.create(
+             model=model_name,
+             messages=api_messages,
+-            **generation_kwargs,
++            **_strict_kwargs(generation_kwargs),
+         )
+         raw_text = response.choices[0].message.content if response.choices else ""
+         usage = response.usage.model_dump() if getattr(response, "usage", None) else None
+@@ -2153,6 +2169,37 @@ def _internal_message_to_openai(message: dict[str, Any]) -> dict[str, Any]:
+     return {"role": message.get("role", "user"), "content": converted}
+ 
+ 
++
++def _cap_images(messages: list[dict[str, Any]], cap: int) -> list[dict[str, Any]]:
++    """Anthropic's OpenAI-compatible endpoint rejects requests with more than 600
++    images ("too many images and documents"). When ADAPTER_MAX_IMAGES > 0, drop the OLDEST frames of the
++    current chunk until at most `cap` image items remain; text items are kept, and a user turn that loses
++    all its content gets a short text marker so the role alternation stays valid."""
++    total = sum(
++        1 for m in messages if isinstance(m.get("content"), list)
++        for it in m["content"] if isinstance(it, dict) and it.get("type") == "image_url"
++    )
++    if total <= cap:
++        return messages
++    to_drop = total - cap
++    out: list[dict[str, Any]] = []
++    for m in messages:
++        content = m.get("content")
++        if to_drop <= 0 or not isinstance(content, list):
++            out.append(m)
++            continue
++        kept = []
++        for it in content:
++            if to_drop > 0 and isinstance(it, dict) and it.get("type") == "image_url":
++                to_drop -= 1
++                continue
++            kept.append(it)
++        if not kept:
++            kept = [{"type": "text", "text": "[earlier frames omitted]"}]
++        out.append({**m, "content": kept})
++    LOGGER.info("image cap: kept %d of %d images (ADAPTER_MAX_IMAGES=%d)", cap, total, cap)
++    return out
++
+ def _file_to_data_url(path: str, max_pixels: int = 0) -> str:
+     if path.startswith("data:"):
+         return _resize_data_url_if_needed(path, max_pixels)
