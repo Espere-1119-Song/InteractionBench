@@ -2,6 +2,11 @@
 
 Evaluation code for **InteractionBench: A Real-Time Interaction Benchmark for Streaming Video Systems**.
 
+[Code (GitHub)](https://github.com/Espere-1119-Song/InteractionBench) ·
+[Dataset (Hugging Face)](https://huggingface.co/datasets/InteractionBench/InteractionBench) ·
+[Blog](https://www.enxinsong.com/blog/interactionbench/) ·
+arXiv (to be added)
+
 A real-time interaction system watches a video stream and decides, at every moment,
 whether to speak or to stay silent. InteractionBench scores three things per item:
 what the system said (Accuracy), when it said it (Timing Accuracy, TA), and whether it
@@ -16,7 +21,9 @@ This repository contains
 - the analysis scripts behind the supplementary tables (`analysis/`),
 - the configuration of every run in the paper (`configs/paper_runs.json`).
 
-Annotations and videos are distributed separately, see [docs/DATA.md](docs/DATA.md).
+Videos, questions and ground truth are on the Hugging Face Hub:
+[InteractionBench/InteractionBench](https://huggingface.co/datasets/InteractionBench/InteractionBench).
+See [docs/DATA.md](docs/DATA.md).
 
 ## Install
 
@@ -32,9 +39,12 @@ Frame extraction calls an `ffmpeg` binary on `PATH`. Python 3.10 or newer.
 ## Data
 
 ```bash
-python scripts/prepare_data.py --data data/interactionbench download
+python scripts/prepare_data.py --data data/interactionbench download   # 812 videos, about 54 GB
 python scripts/prepare_data.py --data data/interactionbench check
 ```
+
+`download --no-videos` fetches the questions and the ground truth only, which is enough
+for scoring existing predictions.
 
 ## Quick start
 

@@ -2,17 +2,17 @@
 """Prepare the benchmark data directory.
 
   download   fetch annotations, videos and multiple-choice files from the Hugging Face Hub
-  mcq        build mcq_options / mcq_key from a multiple-choice items file
   h264       build H.264 proxies for videos in other codecs (AV1, HEVC)
   check      report what is present and what is missing
 
 Expected layout afterwards:
 
-  <data>/results/<domain>/<video_id>/annotation.json
+  <data>/annotations/<domain>/<video_id>.json
   <data>/videos/<domain>/<video_id>.mp4
   <data>/videos_h264/<video_id>.mp4          (optional, from `h264`)
   <data>/mcq/mcq_options_v4.jsonl
   <data>/mcq/mcq_key_v4.jsonl
+  <data>/items.jsonl                         (all items in one table, not read by the code)
 """
 
 from __future__ import annotations
@@ -27,56 +27,18 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-LETTERS = "ABCDEF"
-MCQ_ITEMS_IN_REPO = "processing/labels_mcq/mcq_items_v4.jsonl"
+DATASET_REPO = "InteractionBench/InteractionBench"
 _YT_ID = re.compile(r"\[([A-Za-z0-9_-]{11})\]$")
 
 
 def cmd_download(args) -> None:
     from huggingface_hub import snapshot_download
-    patterns = ["results/**", "metadata/**", "mcq/**", MCQ_ITEMS_IN_REPO]
+    patterns = ["README.md", "items.jsonl", "annotations/**", "mcq/**"]
     if not args.no_videos:
         patterns.append("videos/**")
     snapshot_download(args.repo, repo_type="dataset", local_dir=args.data,
                       allow_patterns=patterns)
     print(f"downloaded {args.repo} -> {args.data}")
-    # the options and key files are a projection of the items file; build them if absent
-    items = Path(args.data) / MCQ_ITEMS_IN_REPO
-    if not (Path(args.data) / "mcq" / "mcq_key_v4.jsonl").exists() and items.exists():
-        args.items, args.version = str(items), "v4"
-        cmd_mcq(args)
-
-
-def cmd_mcq(args) -> None:
-    """Deterministic projection of the items file; no model is involved.
-
-    Input lines: {"item_id", "video_id", "question", "mcq_stem"?, "options": [...],
-                  "answer_letter"} with the correct answer already in place."""
-    out_dir = Path(args.data) / "mcq"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    opts_fp = out_dir / f"mcq_options_{args.version}.jsonl"
-    key_fp = out_dir / f"mcq_key_{args.version}.jsonl"
-    n = 0
-    with opts_fp.open("w", encoding="utf-8") as fo, key_fp.open("w", encoding="utf-8") as fk:
-        for line in Path(args.items).read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            it = json.loads(line)
-            ci = LETTERS.index(it["answer_letter"])
-            options = it["options"]
-            assert 0 <= ci < len(options), it["item_id"]
-            fo.write(json.dumps({
-                "item_id": it["item_id"], "video_id": it["video_id"],
-                "item_index": int(it["item_id"].split("#")[1]),
-                "stem": it.get("mcq_stem") or it["question"],
-                "options": options}, ensure_ascii=False) + "\n")
-            fk.write(json.dumps({
-                "item_id": it["item_id"], "correct_index": ci,
-                "correct_letter": it["answer_letter"],
-                "answer_text": options[ci],
-                "distractors": options[:ci] + options[ci + 1:]}, ensure_ascii=False) + "\n")
-            n += 1
-    print(f"{n} items -> {opts_fp} and {key_fp}")
 
 
 def _video_id(path: Path) -> str:
@@ -149,13 +111,9 @@ def main() -> None:
     ap.add_argument("--data", default="data/interactionbench")
     sub = ap.add_subparsers(dest="command", required=True)
     p = sub.add_parser("download")
-    p.add_argument("--repo", default="GMLRVigil/Vigil", help="dataset repository on the Hub")
+    p.add_argument("--repo", default=DATASET_REPO, help="dataset repository on the Hub")
     p.add_argument("--no-videos", action="store_true", help="annotations only (enough for scoring)")
     p.set_defaults(func=cmd_download)
-    p = sub.add_parser("mcq")
-    p.add_argument("items", help="multiple-choice items file (.jsonl)")
-    p.add_argument("--version", default="v4")
-    p.set_defaults(func=cmd_mcq)
     p = sub.add_parser("h264")
     p.set_defaults(func=cmd_h264)
     p = sub.add_parser("check")

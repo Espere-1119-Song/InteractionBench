@@ -10,7 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def _annotation(video_id, duration, items):
-    return {"category": "demo", "video_id": video_id, "duration_s": duration, "items": items}
+    return {"video_id": video_id, "domain": "demo", "video": f"videos/demo/{video_id}.mp4",
+            "duration_s": duration, "items": items}
 
 
 @pytest.fixture()
@@ -38,9 +39,9 @@ def bench(tmp_path):
         ]),
     }
     for vid, (dur, items) in videos.items():
-        d = root / "results" / "demo" / vid
-        d.mkdir(parents=True)
-        (d / "annotation.json").write_text(json.dumps(_annotation(vid, dur, items)))
+        d = root / "annotations" / "demo"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{vid}.json").write_text(json.dumps(_annotation(vid, dur, items)))
         v = root / "videos" / "demo"
         v.mkdir(parents=True, exist_ok=True)
         (v / f"{vid}.mp4").write_bytes(b"placeholder: tests never decode it")

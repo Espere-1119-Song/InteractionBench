@@ -55,7 +55,7 @@ Multiple-choice items are asked as multiple choice in all three settings. Settin
    python scripts/prepare_data.py --data data/interactionbench h264
    ```
 
-   The runners read `<data>/results/*/*/annotation.json`,
+   The runners read `<data>/annotations/*/*.json`,
    `<data>/mcq/mcq_options_v4.jsonl`, `<data>/mcq/mcq_key_v4.jsonl` (setting 3 only)
    and the H.264 videos `<data>/videos_h264/<video_id>.mp4`.
 
@@ -332,7 +332,7 @@ from the guards that depend on the setup of the agent home.
         "WebFetch", "WebSearch", "Agent", "Task",
         "Read(/path/to/data/**)",
         "Read(/path/to/results/**)",
-        "Bash(*annotation.json*)", "Bash(*mcq_key*)"
+        "Bash(*annotations*)", "Bash(*items.jsonl*)", "Bash(*mcq_key*)"
       ]
     }
   }

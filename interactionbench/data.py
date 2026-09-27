@@ -1,14 +1,17 @@
 """Loader for the InteractionBench annotations.
 
 Layout on disk (mirrors the dataset repository):
-  <root>/results/<domain>/<video_id>/annotation.json
+  <root>/annotations/<domain>/<video_id>.json
   <root>/videos/<domain>/<video_id>.mp4
+  <root>/mcq/mcq_options_v4.jsonl, <root>/mcq/mcq_key_v4.jsonl
 
-annotation.json schema (one file per video):
-  category / video_id / video / duration_s / annotator / not_annotatable / items[]
+Annotation schema (one file per video):
+  video_id / domain / video / duration_s / items[]
   item: capability, time_type, interaction_type, range_length, sub_tag,
         is_negative, auto_number, question, question_time_s,
-        answers[{time_s, content, evidence_time_s?}], notes
+        answers[{time_s, content, evidence_time_s?}]
+
+An item is identified by ``<video_id>#<index in items>``.
 
 Taxonomy:
   time_type A  the question is *revealed* at question_time_s (usually near the
@@ -20,7 +23,10 @@ Taxonomy:
                Continuous output (CST counting, LCG narration, repeated PTR).
 
   is_negative, or content SHOULD_REMAIN_SILENT: the system must never speak.
-  auto_number, or the counting sub_tag: answers[i].content is a running count.
+  auto_number, or sub_tag "counting": answers[i].content is a running count.
+
+The loader also reads the layout of earlier internal copies,
+``<root>/results/<domain>/<video_id>/annotation.json``.
 """
 
 from __future__ import annotations
@@ -30,7 +36,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 SILENT_TOKEN = "SHOULD_REMAIN_SILENT"
-COUNTING_SUB_TAG = "计数型"   # dataset value meaning "counting"
+# sub_tag values that mark a counting item ("计数型" is the value in earlier copies)
+COUNTING_SUB_TAGS = ("counting", "计数型")
 
 CAPABILITIES = ("LVM", "IVQA", "PTR", "TOA", "CIR", "CST", "LCG", "BRC")
 
@@ -53,7 +60,7 @@ class BenchItem:
     capability: str
     time_type: str | None          # A / B / C
     interaction_type: str | None   # QA / INS
-    sub_tag: str | None            # annotation sub-tag (kept verbatim from the dataset)
+    sub_tag: str | None            # counting / goal / narration / None
     is_negative: bool
     auto_number: bool
     question: str
@@ -76,7 +83,7 @@ class BenchItem:
 
     @property
     def is_counting(self) -> bool:
-        return self.auto_number or self.sub_tag == COUNTING_SUB_TAG
+        return self.auto_number or self.sub_tag in COUNTING_SUB_TAGS
 
     @property
     def timed_answers(self) -> list[GTAnswer]:
@@ -101,8 +108,10 @@ class BenchVideo:
 
 def load_video(annotation_path: Path) -> BenchVideo:
     d = json.loads(annotation_path.read_text(encoding="utf-8"))
-    vid = d.get("video_id") or annotation_path.parent.name
-    domain = d.get("category") or annotation_path.parent.parent.name
+    legacy = annotation_path.name == "annotation.json"
+    vid = d.get("video_id") or (annotation_path.parent.name if legacy else annotation_path.stem)
+    domain = (d.get("domain") or d.get("category")
+              or (annotation_path.parent.parent.name if legacy else annotation_path.parent.name))
     dur = float(d.get("duration_s") or 0.0)
     video = BenchVideo(
         video_id=vid,
@@ -142,13 +151,22 @@ def load_video(annotation_path: Path) -> BenchVideo:
 
 
 def load_benchmark(root: str | Path) -> list[BenchVideo]:
-    """Load every annotation.json under root (accepts the repo root, the
-    results/ dir, or a single domain dir)."""
+    """Load every annotation under ``root``, ordered by domain and video id.
+
+    ``root`` is the dataset root, its ``annotations/`` directory, or one domain
+    directory. The layout of earlier copies (``results/.../annotation.json``) is read
+    as well."""
     root = Path(root)
-    if (root / "results").is_dir():
+    if (root / "annotations").is_dir():
+        root = root / "annotations"
+    elif (root / "results").is_dir():
         root = root / "results"
-    videos = [load_video(p) for p in sorted(root.rglob("annotation.json"))]
-    return videos
+    legacy = sorted(root.rglob("annotation.json"))
+    if legacy:
+        return [load_video(p) for p in legacy]
+    # order by directory parts and file stem, the same order as the earlier layout
+    paths = sorted(root.rglob("*.json"), key=lambda p: (*p.parent.parts, p.stem))
+    return [load_video(p) for p in paths]
 
 
 def iter_items(videos: list[BenchVideo], only_valid: bool = True):

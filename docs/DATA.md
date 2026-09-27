@@ -1,22 +1,26 @@
 # Data
 
+The dataset is on the Hugging Face Hub:
+[InteractionBench/InteractionBench](https://huggingface.co/datasets/InteractionBench/InteractionBench).
+It contains the videos, the questions and the ground truth.
+
 ## Layout
 
 ```
 <data>/
-  results/<domain>/<video_id>/annotation.json     one file per video
+  annotations/<domain>/<video_id>.json     one file per video
+  items.jsonl                              all items in one table (not read by the code)
+  mcq/mcq_options_v4.jsonl                 shown to the system
+  mcq/mcq_key_v4.jsonl                     answer key, used by the scorer only
   videos/<domain>/<video_id>.mp4
-  videos_h264/<video_id>.mp4                       optional H.264 proxies
-  mcq/mcq_options_v4.jsonl                         shown to the system
-  mcq/mcq_key_v4.jsonl                             answer key, used by the scorer only
+  videos_h264/<video_id>.mp4               optional H.264 proxies, built locally
 ```
 
 `<data>` defaults to `data/interactionbench`; pass `--data` to use another location.
 
 ```bash
-python scripts/prepare_data.py --data <data> download [--no-videos] [--repo <hub dataset id>]
-python scripts/prepare_data.py --data <data> mcq <mcq_items.jsonl>    # only if mcq/ is absent
-python scripts/prepare_data.py --data <data> h264                     # only if needed, see below
+python scripts/prepare_data.py --data <data> download [--no-videos]
+python scripts/prepare_data.py --data <data> h264       # only if needed, see below
 python scripts/prepare_data.py --data <data> check
 ```
 
@@ -27,18 +31,20 @@ videos and the options file.
 
 ```json
 {
-  "video_id": "...", "category": "<domain>", "duration_s": 183.4,
+  "video_id": "...", "domain": "...", "video": "videos/<domain>/<video_id>.mp4",
+  "duration_s": 183.4,
   "items": [
     {
       "capability": "PTR",
       "time_type": "B",
       "interaction_type": "INS",
-      "range_length": "...",
+      "range_length": "1-5min",
+      "sub_tag": null,
       "is_negative": false,
       "auto_number": false,
       "question": "Tell me when ...",
-      "question_time_s": 0.0,
-      "answers": [ {"time_s": 41.2, "content": "...", "evidence_time_s": null} ]
+      "question_time_s": 0,
+      "answers": [ {"time_s": 41.2, "content": "..."} ]
     }
   ]
 }
@@ -48,8 +54,11 @@ An item is identified by `<video_id>#<index in items>`.
 
 | Field | Meaning |
 |---|---|
+| `domain` | collection directory of the video |
 | `time_type` | `A`: the question is revealed at `question_time_s` and answered at once. `B`: standing request from t = 0, the answer becomes determinable at `answers[i].time_s`. `C`: standing request with many timed answers over the stream. |
 | `interaction_type` | `QA` question, `INS` standing instruction |
+| `range_length` | `0-1min`, `1-5min`, `5-20min` |
+| `sub_tag` | `counting`, `goal`, `narration`, or null |
 | `is_negative` | the requested event never happens; the system must stay silent. The answer content is `SHOULD_REMAIN_SILENT`. |
 | `auto_number` | the answers are a running count |
 | `answers[i].time_s` | earliest moment at which response `i` is warranted |
@@ -57,19 +66,18 @@ An item is identified by `<video_id>#<index in items>`.
 
 ## Tasks
 
-The annotation labels and the task names used in the paper:
+| Task in the paper | Annotation labels | Items | Response obligation |
+|---|---|---|---|
+| Look | `IVQA` | 159 | answer when asked, from the current view |
+| Recall | `LVM`, `CIR` | 163 | answer when asked, from earlier evidence |
+| Time | `TOA` | 126 | answer when an order or temporal condition resolves |
+| Alert | `PTR` | 313 | speak when the requested event occurs |
+| Track | `CST`, `BRC` | 192 | speak when a count or state changes |
+| Commentate | `LCG` | 107 | speak one line for each new step or scene |
 
-| Label | Task in the paper | Response obligation |
-|---|---|---|
-| `IVQA` (with `CIR`, causal questions) | Look | answer when asked, from the current view |
-| `LVM` | Recall | answer when asked, from earlier evidence |
-| `TOA` | Time | answer when an order or temporal condition resolves |
-| `PTR` | Alert | speak when the requested event occurs |
-| `CST` (with `BRC`, belief revision) | Track | speak when a count or state changes |
-| `LCG` | Commentate | speak one line for each new step or scene |
-
-The scorer reports `IVQA+CIR` and `CST+BRC` as merged groups (`by_capability_group`)
-and every label separately (`by_capability`).
+The scorer reports every label separately (`by_capability`). Its merged groups
+(`by_capability_group`) are `IVQA+CIR` and `CST+BRC`; the first differs from the task
+grouping above, where the 7 `CIR` items belong to Recall.
 
 ## Item lists
 
