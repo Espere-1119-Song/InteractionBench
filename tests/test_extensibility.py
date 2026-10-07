@@ -17,6 +17,18 @@ def test_zoo_name_and_alias_resolve():
     assert cfg["adapter"] == "hf-vlm" and cfg["repo"] == "Qwen/Qwen3-VL-8B-Instruct"
     assert cfg["short_name"] == "qwen3vl-8b"
 
+    mage = resolve_config("mage-vl")
+    assert mage == {
+        "adapter": "hf-vlm",
+        "repo": "microsoft/Mage-VL",
+        "model_cls": "AutoModelForCausalLM",
+        "image_style": "placeholder",
+        "trust_remote_code": True,
+        "revision": "d88b153285f1633a61b2f693c59c8576693af185",
+        "attn_implementation": "sdpa",
+        "short_name": "mage-vl-4b",
+    }
+
 
 def test_model_path_and_overrides():
     cfg = resolve_config("qwen3vl-8b", model_path="/ckpt/finetuned", attn_implementation="eager")

@@ -75,8 +75,10 @@ class HFChatVLM(ChatModel):
         device_map: str = "auto",
         dtype: str = "bfloat16",
         attn_implementation: str = "sdpa",
+        revision: str | None = None,
         chat_template_kwargs: dict | None = None,
         from_pretrained_kwargs: dict | None = None,
+        processor_kwargs: dict | None = None,
         drop_input_keys: list[str] | None = None,
         **_ignored,
     ):
@@ -88,17 +90,21 @@ class HFChatVLM(ChatModel):
         if trust_remote_code:
             _compat_shims()
         cls = _load_class(model_cls)
+        model_load_kwargs = dict(from_pretrained_kwargs or {})
+        processor_load_kwargs = dict(processor_kwargs or {})
+        processor_load_kwargs.setdefault("trust_remote_code", trust_remote_code)
+        if revision is not None:
+            model_load_kwargs["revision"] = revision
+            processor_load_kwargs["revision"] = revision
         self.model = cls.from_pretrained(
             repo,
             dtype=getattr(torch, dtype),
             device_map=device_map,
             attn_implementation=attn_implementation,
             trust_remote_code=trust_remote_code,
-            **(from_pretrained_kwargs or {}),
+            **model_load_kwargs,
         ).eval()
-        from transformers import AutoProcessor
-
-        self.processor = AutoProcessor.from_pretrained(repo, trust_remote_code=trust_remote_code)
+        self.processor = transformers.AutoProcessor.from_pretrained(repo, **processor_load_kwargs)
         self.tokenizer = getattr(self.processor, "tokenizer", None)
 
     def _to_native(self, messages: list[dict]) -> list[dict]:
