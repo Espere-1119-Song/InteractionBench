@@ -68,6 +68,17 @@ MODEL_ZOO: dict[str, dict] = {
         "chat_template_kwargs": {"enable_thinking": False},
     },
     # ---- further open-weight models (configured, not in the paper tables) --
+    "mage-vl-4b": {
+        "adapter": "hf-vlm",
+        "repo": "microsoft/Mage-VL",
+        "model_cls": "AutoModelForCausalLM",
+        "image_style": "placeholder",
+        "trust_remote_code": True,
+        "revision": "d88b153285f1633a61b2f693c59c8576693af185",
+        # Mage-VL requires transformers >= 5.7.  SDPA avoids making flash-attn a
+        # requirement for the frame-sampled InteractionBench protocol.
+        "attn_implementation": "sdpa",
+    },
     "videochat3-4b": {
         "adapter": "hf-vlm",
         "repo": "MCG-NJU/VideoChat3-4B",
@@ -136,6 +147,7 @@ MODEL_ZOO: dict[str, dict] = {
 ALIASES: dict[str, str] = {
     "qwen3vl": "qwen3vl-8b",
     "llava-ov2": "llava-ov2-8b",
+    "mage-vl": "mage-vl-4b",
     "videochat3": "videochat3-4b",
     "keye": "keye-vl2-30b",
 }

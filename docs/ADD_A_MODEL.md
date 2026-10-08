@@ -23,6 +23,23 @@ Text-only language models use `hf-text:<repo>` together with `--blind`.
 
 A fine-tuned checkpoint of a listed model: `--model qwen3vl-8b --model-path /path/to/ckpt`.
 
+Mage-VL is available as the named configuration `mage-vl-4b` (or the `mage-vl`
+alias). The named configuration pins the tested checkpoint revision. Install its
+known-compatible runtime first; the second step needs Torch to be importable:
+
+```bash
+pip install 'torch==2.9.1' 'torchvision==0.24.1' 'transformers==5.7.0' accelerate
+pip install --no-build-isolation 'mamba-ssm==2.3.2.post1' opencv-python decord
+yes y | ibench run --model mage-vl --protocol sliding --mcq --limit 10 \
+  --out results/runs/mage-vl_sliding_smoke
+```
+
+The `yes y` supplies a confirmation requested by Mage-VL's nested remote processor;
+the code being confirmed is pinned by the model configuration. This uses the same
+frame-sampled, multi-image polling protocol as the other turn-based VLMs. It does not
+exercise Mage-VL's native video/codec processor or its visual-only proactive gate;
+those are different evaluation protocols.
+
 ## 2. An OpenAI-compatible endpoint, no code
 
 ```bash
