@@ -1,14 +1,4 @@
-"""Score a predictions file against the benchmark annotations.
-
-Predictions: one JSON object per line, one line per item:
-  {"video_id": "...", "item_index": 0,
-   "emissions": [{"t": 12.3, "content": "...", "latency_s": 0.15}, ...],
-   "n_polls": 30, "poll_latencies": [...],           # optional, system metrics
-   "model": "...", "run": "..."}                     # optional, carried through
-
-Any system can be scored, whatever produced the file. Benchmark items without a
-prediction line are scored as fully silent unless ``skip_missing`` is set.
-"""
+"""Score a predictions file against the benchmark annotations."""
 
 from __future__ import annotations
 
@@ -26,10 +16,10 @@ from .metrics import MetricConfig, aggregate, score_item
 class EvalConfig:
     predictions: str
     data: str = "data/interactionbench"
-    mcq_key: str | None = None          # answer key: multiple-choice items scored by option
-    items: str | None = None            # file of item_ids to score (frozen subsets)
+    mcq_key: str | None = None
+    items: str | None = None
     skip_missing: bool = False
-    judge: str | None = None            # judge spec, see interactionbench.judges
+    judge: str | None = None
     judge_cache: str | None = "results/judge_cache/judge_cache.jsonl"
     judge_prompt: str = "v2"
     judge_args: dict | None = None
@@ -49,7 +39,6 @@ def load_predictions(path: str | Path) -> dict[str, dict]:
 
 
 def evaluate(cfg: EvalConfig, judge=None) -> tuple[dict, list[dict]]:
-    """Returns (summary, per-item records). Pass ``judge`` to reuse a built judge."""
     if judge is None and cfg.judge:
         from .judges import make_judge
         judge = make_judge(cfg.judge, cache_path=cfg.judge_cache,
@@ -118,8 +107,6 @@ def evaluate(cfg: EvalConfig, judge=None) -> tuple[dict, list[dict]]:
     }
     return agg, records
 
-
-# ------------------------------------------------------------------ reporting
 
 _COLS = [
     ("n_items", "n", 4), ("total_score", "total", 6),

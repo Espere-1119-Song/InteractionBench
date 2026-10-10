@@ -1,11 +1,4 @@
-"""Text-only HF chat-LM adapter (no vision tower).
-
-Used for the language-only baseline (e.g. Qwen/Qwen3-8B) under a polling
-protocol with ``--blind``: the canonical messages carry no images, so we flatten
-each content list to its text parts, apply the tokenizer chat template
-(thinking disabled for reasoning-capable LMs) and decode greedily, exactly
-matching HFChatVLM's generation settings.
-"""
+"""Text-only HF chat-LM adapter (no vision tower)."""
 
 from __future__ import annotations
 

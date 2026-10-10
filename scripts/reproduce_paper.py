@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the paper tables.
-
-  python scripts/reproduce_paper.py list
-      Print every configuration of the paper and the command that generates it.
-
-  python scripts/reproduce_paper.py eval --runs-root results/runs --judge hf:Qwen/Qwen3-14B
-      Score every run found under <runs-root>/<name>/preds.jsonl with the paper
-      protocol and compare with the reference scores in configs/paper_runs.json.
-
-The paper protocol is: multiple-choice items scored by option, free-form content judged
-by Qwen3-14B with grading prompt v2, Delta = 5 s, pre-anchor tolerance 1 s, no content
-gate. Use ``--judge cache:<verdict files>`` to replay stored verdicts without a GPU, or
-omit ``--judge`` for lexical scoring of free-form content (numbers then differ from the
-paper on free-form items).
-"""
+"""Reproduce the paper tables."""
 
 from __future__ import annotations
 
@@ -66,7 +52,7 @@ def cmd_eval(args) -> None:
     for r in cfg["runs"]:
         if args.only and r["name"] not in args.only:
             continue
-        if r.get("protocol") == "human":      # scored by analysis/human_reference.py
+        if r.get("protocol") == "human":
             continue
         preds = Path(args.runs_root) / r["name"] / "preds.jsonl"
         if not preds.exists():

@@ -1,43 +1,4 @@
-"""Run LiveCC-7B-Instruct (showlab, CVPR25) over InteractionBench.
-
-LiveCC is a *streaming commentary* model: conditioned on a query, it emits a
-short utterance for every ~1s clip as the video plays (KV-cache streaming, no
-speak/stay-silent decision head). We drive its official `live_cc` loop and
-record every non-empty utterance as an emission at that clip's stop timestamp.
-
-Note on interpretation: because LiveCC has no silence mechanism, it is expected
-to score high on coverage (TA) and near-zero on Silence Compliance. This is the
-behaviour of a commentary model and it is recorded without suppression.
-
-Item protocol:
-  B/C  the standing request is passed as the query from t=0
-  A    frames stream with a neutral watching query until question_time_s, then
-       the real question is injected (LiveCC re-conditions when `message`
-       changes); polling continues to question_time + --a-window
-
-Upstream:
-  code        https://github.com/showlab/livecc
-              --livecc-repo (or the environment variable LIVECC_REPO), default
-              external/livecc. The runner imports demo/infer.py and
-              livecc-utils/src from this checkout.
-  checkpoint  chenjoya/LiveCC-7B-Instruct
-              (https://huggingface.co/chenjoya/LiveCC-7B-Instruct), --model
-
-Environment:
-  transformers 4.50, qwen-vl-utils 0.0.8, liger-kernel 0.5.5, decord. The
-  flash-attn package is not required (see _build_infer). decord cannot read
-  AV1 video, so pass an H.264 proxy directory with --video-dir for a data set
-  that contains AV1 files. See README.md in this directory.
-
-Command used for the paper numbers (218-item subset, earlier multiple-choice
-file; see README.md):
-  python baselines/livecc/run.py \\
-      --items benchmark/splits/frozen218.txt --mcq
-
-Output:
-  results/runs/livecc-7b_streaming_iv1[_mcq]/preds.jsonl   (or under --out)
-  results/runs/livecc-7b_streaming_iv1[_mcq]/raw/<item_id>.json
-"""
+"""Run LiveCC-7B-Instruct (showlab, CVPR25) over InteractionBench."""
 
 from __future__ import annotations
 
@@ -62,17 +23,9 @@ _SENT_END = (".", "!", "?", "。", "!", "?")
 
 
 def group_sentences(fragments: list[dict]) -> list[dict]:
-    """LiveCC streams ~16 tokens per 1s clip, so one spoken sentence arrives as
-    several fragments ("A white arrow appears on the" / "right side."). Scoring
-    each fragment as a separate utterance would be doubly unfair (fragments
-    can't match a reference answer, and each would count as its own violation),
-    so consecutive fragments are joined into sentences. A sentence is
-    timestamped at the moment its FIRST token appeared — when the model started
-    speaking it, which is what Timing Accuracy asks about."""
     out, buf, t0, lat = [], [], None, 0.0
     for f in fragments:
         txt = (f["content"] or "").strip()
-        # ' ...' is LiveCC's streaming-EOS marker, not sentence content
         while txt.endswith("..."):
             txt = txt[:-3].strip()
         if not txt:
@@ -90,8 +43,6 @@ def group_sentences(fragments: list[dict]) -> list[dict]:
 
 
 def _build_infer(cls, model_path: str):
-    """The upstream __init__ hard-codes flash_attention_2, which needs the
-    flash-attn package. This function does the same setup with sdpa."""
     import functools
 
     import torch
@@ -198,7 +149,6 @@ def main() -> None:
         t = 1.0
         try:
             while t <= end_s + 1e-6:
-                # A-type: hold the real question back until its reveal moment
                 msg = question if (not is_A or t >= it.question_time_s - 1e-6) else NEUTRAL
                 state["video_timestamp"] = t
                 t0 = time.perf_counter()
@@ -210,8 +160,6 @@ def main() -> None:
                     polls.append({"t": round(t_stop, 2), "response": txt,
                                   "latency_s": round(lat, 3),
                                   "revealed": msg is question})
-                    # A-type: utterances before the reveal are neutral commentary,
-                    # not answers to the question — never counted as emissions
                     if txt and (not is_A or t_stop >= it.question_time_s - 1e-6):
                         emissions.append({"t": round(t_stop, 2), "content": txt,
                                           "latency_s": round(lat, 3)})

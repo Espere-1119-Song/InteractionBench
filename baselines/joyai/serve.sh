@@ -1,68 +1,6 @@
 #!/usr/bin/env bash
-# Start the JoyAI-VL-Interaction serving stack that baselines/joyai/run.py talks to.
-#
-# The stack has three processes:
-#   main model server      vLLM, OpenAI-compatible (not started when KERNEL=api)
-#   summarizer server      vLLM, OpenAI-compatible (not started when KERNEL=api)
-#   live adapter           services/webinfer/live_adapter.py of the upstream repository
-#
-# Upstream repository: https://github.com/jd-opensource/JoyAI-VL-Interaction
-#
-# Three kernel variants, selected with KERNEL:
-#   KERNEL=native  main model = jdopensource/JoyAI-VL-Interaction-Preview (paper run)
-#   KERNEL=open    main model = another open-weight model served by vLLM
-#                  (default Qwen/Qwen3-VL-8B-Instruct)
-#   KERNEL=api     main model and summarizer behind one OpenAI-compatible API endpoint;
-#                  no GPU is needed. Requires the patches live_adapter.patch and
-#                  memory_summarizer.patch (see README.md).
-#
-# Every setting is an environment variable. Defaults reproduce the paper runs.
-#
-#   common
-#     PYTHON            python of the environment with vllm, aiohttp, openai   [python]
-#     JOYAI_REPO        checkout of the upstream repository   [external/JoyAI-VL-Interaction]
-#     LOG_DIR           directory of the three log files                       [logs/joyai]
-#     HOST              bind address of the adapter                            [127.0.0.1]
-#     STARTUP_TIMEOUT   seconds to wait for the stack to become healthy        [1800]
-#     ADAPTER_PORT      native 8070 | open 8170 | api 8071
-#   KERNEL=native and KERNEL=open
-#     MAIN_MODEL        Hugging Face id or local path of the main model
-#     MAIN_NAME         served model name of the main model
-#     MAIN_PORT         native 7060 | open 7160
-#     SUMM_MODEL        summarizer / long-term memory model   [Qwen/Qwen3-VL-4B-Instruct]
-#     SUMM_NAME         served model name of the summarizer   [Qwen3-VL-4B-Instruct]
-#     SUMM_PORT         native 8065 | open 8165
-#     MAX_MODEL_LEN     context length of both servers                         [262144]
-#     MAIN_GPU_FRACTION vLLM --gpu-memory-utilization of the main server       [0.65]
-#     SUMM_GPU_FRACTION vLLM --gpu-memory-utilization of the summarizer        [0.20]
-#     MAIN_CUDA_DEVICES, SUMM_CUDA_DEVICES
-#                       CUDA_VISIBLE_DEVICES of each server [inherited]. The paper runs
-#                       put both servers on one 180 GB GPU; the fractions above are
-#                       sized for that. Use two GPUs and larger fractions otherwise.
-#   KERNEL=api
-#     API_BASE          endpoint root, e.g. https://api.anthropic.com/v1       [required]
-#     API_KEY_ENV       NAME of the environment variable that holds the key    [API_KEY]
-#     MAIN_MODEL        model id of the main model                             [required]
-#     SUMM_MODEL        model id of the summarizer / long-term memory model    [MAIN_MODEL]
-#     ADAPTER_OAI_STRICT  send only max_tokens to the endpoint                 [1]
-#     ADAPTER_MAX_IMAGES  keep at most this many images per request            [unset = no cap]
-#
-# Long-term memory endpoint: the adapter is started with the same options as in the
-# paper runs, which set --summarizer-api-base but not --longterm-api-base. The adapter
-# then sends long-term memory compression requests to its built-in default
-# http://127.0.0.1:8065/v1. This equals the summarizer endpoint only for KERNEL=native
-# with the default SUMM_PORT. The adapter reads the environment variable
-# LONGTERM_SUMMARIZER_API_BASE; setting it changes the endpoint and deviates from the
-# paper runs of the "open" and "api" variants (see README.md).
-#
-# Usage:
-#   bash baselines/joyai/serve.sh                              # native kernel
-#   KERNEL=open bash baselines/joyai/serve.sh                  # Qwen3-VL-8B as main model
-#   KERNEL=api API_BASE=https://api.anthropic.com/v1 API_KEY_ENV=ANTHROPIC_API_KEY \
-#     MAIN_MODEL=claude-sonnet-5 SUMM_MODEL=claude-haiku-4-5 bash baselines/joyai/serve.sh
-#
-# The script stays in the foreground while the stack runs. Stop it with Ctrl-C; the
-# servers are stopped with it. Run baselines/joyai/run.py from a second shell.
+# Start the JoyAI-VL-Interaction serving stack used by baselines/joyai/run.py.
+# Settings are environment variables; see README.md in this directory.
 
 set -uo pipefail
 
@@ -95,7 +33,6 @@ case "$KERNEL" in
     : "${MAIN_MODEL:?set MAIN_MODEL to the model id of the main model}"
     SUMM_MODEL=${SUMM_MODEL:-$MAIN_MODEL}
     API_KEY_ENV=${API_KEY_ENV:-API_KEY}
-    # The adapter reads the key from MODEL_API_KEY; the key is never put on a command line.
     export MODEL_API_KEY=${!API_KEY_ENV:-}
     : "${MODEL_API_KEY:?the environment variable named by API_KEY_ENV is empty}"
     export ADAPTER_OAI_STRICT=${ADAPTER_OAI_STRICT-1}
@@ -113,7 +50,7 @@ cleanup() { [ ${#PIDS[@]} -gt 0 ] && kill "${PIDS[@]}" 2>/dev/null; wait 2>/dev/
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-healthy() {  # healthy <url> <pattern>
+healthy() {
   curl -s -m 4 "$1" | grep -q "$2"
 }
 
@@ -143,7 +80,7 @@ if [ "$KERNEL" != "api" ]; then
     --longterm-model "$SUMM_NAME" \
     >> "$LOG_DIR/adapter.log" 2>&1 &
   PIDS+=($!)
-  PAUSE=15                     # the model servers need several minutes to load
+  PAUSE=15
 else
   "$PYTHON" "$ADAPTER" \
     --host "$HOST" --port "$ADAPTER_PORT" --adapter-model streaming-infer-adapter \

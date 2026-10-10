@@ -1,40 +1,5 @@
 #!/usr/bin/env python3
-"""Scripted, video-free policies for the metric audit.
-
-Each policy writes a predictions file without looking at any video. The policies probe
-whether a timing or silence score can be raised without understanding the stream.
-
-  always_fire      one emission every second, t = 1, 2, ..., floor(duration)
-  never_fire       no emission
-  periodic_10s     one emission every 10 s, t = 10, 20, ...
-  chatter          Poisson process, rate 0.5 emissions per minute (exponential gaps,
-                   random.Random(7)), times rounded to 0.01 s
-  burst_repeater   every 20 s a burst of three emissions at t, t + 0.4, t + 0.8
-  parrot           one emission 0.5 s after the question time of the item
-                   (on every item, including items that require silence)
-  anticipatory     one emission 0.5 s before every reference response time
-                   (question time for time type A, merged answer times otherwise);
-                   nothing on items that require silence. With a pre-anchor tolerance
-                   of 0 every emission is premature or redundant; with a tolerance of
-                   at least 0.5 s every emission is a match with delay 0.
-
-Every emission carries the same text, "Something is happening now.".
-
-Upstream repository or checkpoint: none. Environment: Python >= 3.10 and the
-``interactionbench`` package; no GPU.
-
-Command used for the paper numbers (pre-anchor tolerance 1 s):
-
-  python analysis/scripted_policies.py --pre-tol 1.0 --suffix _pretol1
-  python analysis/scripted_policies.py --pre-tol 1.0 --suffix _pretol1 \
-      --policies anticipatory --summary-name scripted_anticipatory
-
-Outputs:
-  <policies_root>/scripted_<policy>/preds.jsonl
-  <policies_root>/scripted_<policy>/<eval_name>/{summary.json,records.jsonl}
-  <out>/scripted_policies<suffix>.json     total, accuracy, timing accuracy and silence
-                                           compliance of every policy
-"""
+"""Scripted, video-free policies for the metric audit."""
 
 from __future__ import annotations
 
@@ -49,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import EVAL_NOJUDGE, add_common_args, resolve_common, run_eval  # noqa: E402
 
 TXT = "Something is happening now."
-LEAD = 0.5  # anticipatory: seconds before the reference response time
+LEAD = 0.5
 POLICIES = ["always_fire", "never_fire", "periodic_10s", "chatter", "burst_repeater", "parrot"]
 ALL_POLICIES = POLICIES + ["anticipatory"]
 

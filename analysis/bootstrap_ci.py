@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
-"""Bootstrap 95% confidence interval of the item-level mean total score of each run.
-
-For every run the ``total_score`` values of <run>/<eval_name>/records.jsonl are
-resampled with replacement B = 2000 times (item-level percentile bootstrap). The
-interval is [means[int(0.025 * B)], means[int(0.975 * B) - 1]] of the sorted resampled
-means.
-
-The random generator is seeded once (random.seed(20260923)) and is shared by all runs,
-so the interval of a run depends on the runs that precede it in the list. Keep the
-order of the run list to reproduce stored numbers. A run without records is written as
-a row marked MISSING and draws no random numbers.
-
-Run list (``--runs``): run names, a text file with one name per line, or a JSON file
-with a list of {"run": <name>, "dir": <evaluation directory>} objects. With names the
-evaluation directory is <runs_root>/<run>/<eval_name>.
-
-Upstream repository or checkpoint: none. Environment: Python >= 3.10; no GPU.
-
-Command used for the paper numbers:
-
-  python analysis/bootstrap_ci.py --runs runs.txt --eval-name eval_judge_pretol1
-
-Output:
-  <out>/ci_overall.csv   columns run, n, overall, ci_lo, ci_hi, dir
-"""
+"""Bootstrap 95% confidence interval of the item-level mean total score of each run."""
 
 from __future__ import annotations
 

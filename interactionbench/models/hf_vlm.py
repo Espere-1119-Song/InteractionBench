@@ -1,15 +1,4 @@
-"""Generic Hugging Face vision-language adapter driven by a config dict.
-
-Covers most chat VLMs through two knobs:
-  - ``model_cls``     which auto/explicit class to load with
-  - ``image_style``   "payload"  -> image data kept inline in message content
-                                    (Qwen-VL family expects this)
-                      "placeholder" -> content carries {"type":"image"} markers and
-                                    the PIL images are passed separately to the
-                                    processor (standard HF multimodal path; LLaVA-OV2)
-
-Both styles funnel into: apply_chat_template -> processor(text, images) -> generate.
-"""
+"""Generic Hugging Face vision-language adapter driven by a config dict."""
 
 from __future__ import annotations
 
@@ -20,19 +9,14 @@ from .base import ChatModel, collect_images
 
 
 def _compat_shims() -> None:
-    """Inject aliases so remote code written for newer transformers imports cleanly."""
     import transformers.configuration_utils as cu
     if not hasattr(cu, "PreTrainedConfig") and hasattr(cu, "PretrainedConfig"):
         cu.PreTrainedConfig = cu.PretrainedConfig
     if not hasattr(transformers, "PreTrainedConfig") and hasattr(transformers, "PretrainedConfig"):
         transformers.PreTrainedConfig = transformers.PretrainedConfig
-    # VideoChat3 remote code imports a docstring constant that transformers 5.x
-    # dropped; it is only consumed by an @add_start_docstrings decorator
     import transformers.video_processing_utils as vpu
     if not hasattr(vpu, "BASE_VIDEO_PROCESSOR_DOCSTRING"):
         vpu.BASE_VIDEO_PROCESSOR_DOCSTRING = ""
-    # Nemotron-Omni remote code calls create_causal_mask(input_embeds=...); transformers 5.x
-    # renamed the kwarg to inputs_embeds. Wrap once so the old name is accepted.
     try:
         import inspect as _inspect
         from transformers import masking_utils as _mu
@@ -42,14 +26,12 @@ def _compat_shims() -> None:
             def _create_causal_mask(*a, **kw):
                 if "input_embeds" in kw:
                     kw["inputs_embeds"] = kw.pop("input_embeds")
-                kw = {k: v for k, v in kw.items() if k in _params}  # e.g. cache_position (4.x-only)
+                kw = {k: v for k, v in kw.items() if k in _params}
                 return _orig(*a, **kw)
             _create_causal_mask._ibench_shim = True
             _mu.create_causal_mask = _create_causal_mask
     except ImportError:
         pass
-    # Molmo2 remote code looks up ROPE_INIT_FUNCTIONS["default"], a key that
-    # transformers 5.x renamed away; map it back to the standard initializer
     try:
         from transformers import modeling_rope_utils as mru
         if "default" not in mru.ROPE_INIT_FUNCTIONS:
@@ -84,7 +66,7 @@ class HFChatVLM(ChatModel):
     ):
         self.repo = repo
         self.chat_template_kwargs = dict(chat_template_kwargs or {})
-        self.drop_input_keys = list(drop_input_keys or [])  # processor outputs the model's generate() rejects
+        self.drop_input_keys = list(drop_input_keys or [])
         self.name = short_name or repo.split("/")[-1]
         self.image_style = image_style
         if trust_remote_code:
@@ -110,7 +92,6 @@ class HFChatVLM(ChatModel):
     def _to_native(self, messages: list[dict]) -> list[dict]:
         if self.image_style == "payload":
             return messages
-        # placeholder: strip image payloads from content
         native = []
         for m in messages:
             c = m.get("content")
@@ -147,6 +128,6 @@ class HFChatVLM(ChatModel):
         decoded = self.processor.batch_decode(
             trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )[0]
-        if "</think>" in decoded:  # reasoning models: keep the answer after the thinking block
+        if "</think>" in decoded:
             decoded = decoded.rsplit("</think>", 1)[1]
         return decoded.strip()

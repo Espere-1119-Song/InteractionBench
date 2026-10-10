@@ -1,9 +1,4 @@
-"""Prompts of the polling and offline protocols.
-
-The strings in this file define the evaluation protocol. Changing any of them changes
-the benchmark numbers, so treat them as frozen when reproducing the paper and add a
-new hint set or a new protocol instead of editing in place.
-"""
+"""Prompts of the polling and offline protocols."""
 
 from __future__ import annotations
 
@@ -34,8 +29,6 @@ INTERLEAVED_SUFFIX = (
 
 DEFAULT_HINT = "Speak only when it is the right moment."
 
-# Per-capability instruction. "default" is the paper protocol; "v2" and "v3" are
-# paraphrases with the same content, used by the prompt-robustness ablation.
 CAPABILITY_HINTS: dict[str, dict[str, str]] = {
     "default": {
         "PTR": ("Speak only at the exact moment the requested event happens. If it never "
@@ -106,9 +99,6 @@ Current stream time: {t:.1f}s. The user JUST asked:
 
 INTERLEAVED_TURN = "[stream time {t:.1f}s] New frames above. Decide now (DECISION / RESPONSE)."
 
-# Offline (temporal grounding) protocol: the system sees the whole video at once and
-# grounds each response in time. Claimed timestamps become emission times, so the same
-# timing and silence scores apply. This is the non-real-time reference track.
 OFFLINE_TEMPLATE = """\
 You are watching a recorded video ({dur:.0f} seconds long, {n} frames sampled \
 uniformly from 0s to {dur:.0f}s are shown in order).
@@ -137,7 +127,6 @@ Output EXACTLY one line in this format (time in seconds):
 
 
 def hint_for(capability: str, hint_set: str = "default") -> str:
-    """Capability instruction. A paraphrase set overrides the default per capability."""
     if hint_set not in CAPABILITY_HINTS:
         raise KeyError(f"unknown hint set '{hint_set}'. known: {sorted(CAPABILITY_HINTS)}")
     hints = dict(CAPABILITY_HINTS["default"])
@@ -146,10 +135,6 @@ def hint_for(capability: str, hint_set: str = "default") -> str:
 
 
 def format_question(item: BenchItem, options) -> str:
-    """Render the question, as multiple choice when the item has options.
-
-    ``options`` is a list of option strings, or a dict ``{"options": [...], "stem": str}``
-    whose stem, when present, supersedes the annotation text."""
     if not options:
         return item.question
     if isinstance(options, dict):

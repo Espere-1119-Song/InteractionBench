@@ -1,17 +1,4 @@
-"""Generate predictions: drive one system over the benchmark with one protocol.
-
-Output directory layout:
-  <out>/preds.jsonl      one line per item, directly consumable by the evaluator
-  <out>/raw/<item>.json  every decision step including the silent ones
-  <out>/config.json      the full configuration of the run
-
-preds.jsonl schema:
-  {"video_id", "item_index", "model", "run",
-   "emissions": [{"t", "content", "latency_s"}],
-   "n_polls", "poll_latencies", "failed"?}
-
-A run is resumable: items already present in preds.jsonl are skipped.
-"""
+"""Generate predictions: drive one system over the benchmark with one protocol."""
 
 from __future__ import annotations
 
@@ -37,9 +24,9 @@ class RunConfig:
     protocol_config: ProtocolConfig = field(default_factory=ProtocolConfig)
     sample_fps: float = 2.0
     max_long_side: int = 512
-    mcq: str | None = None              # mcq_options.jsonl; eligible items become multiple choice
-    video_dir: str | None = None        # default <data>/videos
-    items: str | None = None            # file with one item_id per line
+    mcq: str | None = None
+    video_dir: str | None = None
+    items: str | None = None
     videos: list[str] | None = None
     capabilities: list[str] | None = None
     limit: int = 0
@@ -47,12 +34,10 @@ class RunConfig:
     shard_index: int = 0
     out: str | None = None
     overwrite: bool = False
-    skip_oom: bool = True               # record a GPU out-of-memory item as silent and continue
+    skip_oom: bool = True
 
 
 def is_gpu_oom(exc: BaseException) -> bool:
-    """CUDA out-of-memory, including its cuDNN-attention symptom. Anything else is a
-    real error and must propagate."""
     if type(exc).__name__ == "OutOfMemoryError":
         return True
     msg = str(exc)
@@ -107,7 +92,6 @@ def to_prediction(item: BenchItem, polls: list[dict], model: str, run_tag: str,
 
 
 def run_benchmark(cfg: RunConfig, model=None) -> Path:
-    """Run and return the path of preds.jsonl. Pass ``model`` to reuse a loaded one."""
     from .models import build_model
 
     protocol = get_protocol(cfg.protocol)
@@ -164,7 +148,7 @@ def run_benchmark(cfg: RunConfig, model=None) -> Path:
         print(f"[{i}/{len(ready)}] {it.capability}/{it.time_type} {it.item_id} "
               f"({it.duration_s:.0f}s)", flush=True)
         if it.video_id not in frames_cache:
-            frames_cache.clear()  # one video at a time; items are grouped by video
+            frames_cache.clear()
             frames_cache[it.video_id] = extract_frames(
                 mp4, sample_fps=cfg.sample_fps,
                 max_long_side=cfg.max_long_side) if needs_frames else []
@@ -177,8 +161,6 @@ def run_benchmark(cfg: RunConfig, model=None) -> Path:
         except Exception as exc:
             if not (cfg.skip_oom and is_gpu_oom(exc)):
                 raise
-            # An item that does not fit the GPU is recorded as silent (no emissions)
-            # with a "failed" note, so one item cannot block the whole run.
             import torch
             torch.cuda.empty_cache()
             failed = f"{type(exc).__name__}: {str(exc).splitlines()[0][:160]}"
@@ -199,7 +181,6 @@ def run_benchmark(cfg: RunConfig, model=None) -> Path:
 
 
 def merge_predictions(inputs: list[str], output: str) -> int:
-    """Concatenate prediction files, keeping the first line seen for each item."""
     seen, rows = set(), []
     for fp in inputs:
         for line in Path(fp).read_text(encoding="utf-8").splitlines():

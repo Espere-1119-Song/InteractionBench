@@ -1,83 +1,5 @@
 #!/usr/bin/env python3
-"""Human reference: conversion, scoring variants and comparison with systems.
-
-A human participant watched the streams in an annotation tool and typed free-text
-answers while the video played. The tool export is converted into the prediction
-schema and scored with the same metrics as the systems. The human run is named
-``human_reference``.
-
-Allowances of the human protocol. Each one is a departure from the protocol applied to
-the systems, and is applied only when the corresponding sub-command or option is used:
-
-  1. Multiple choice scored by option text (``score``). Systems see the options and
-     answer by letter; their multiple-choice items are scored by option match. The
-     participant did not see the options and answered in free text, so the answer is
-     graded by the judge (same judge, same grading prompt) against the text of the
-     correct option (``answer_text`` of the answer key). Free-form items are graded
-     as usual. No numeric parameter.
-  2. Reaction latency removed on A-type items (``shift-a``). Every emission of an
-     item with time type A is moved back by the measured human reaction latency,
-     2.48 s, and is not moved before the question time: t' = max(t - 2.48, question
-     time, 0), rounded to 0.001 s. The value is the median delay between the question
-     time and the first emission at or after it, over the 53 answered IVQA items
-     with time type A of the human run (``reaction-latency`` recomputes it; key
-     ``shift_s_used``). Items with time type B or C are not shifted.
-  3. Unbounded pre-anchor tolerance (``score --pre-tol inf``). Systems are scored
-     with a pre-anchor tolerance of 1.0 s. With ``inf`` no early emission on a
-     positive item counts as a violation: emissions are attributed greedily in time
-     order, an emission before the first reference time answers the first event with
-     delay 0, and only repeated answers to an event that is already answered count
-     as redundant. Items that require silence are scored as for systems.
-
-Unchanged for the human run: the acceptable-delay bound Delta = 5.0 s, the disabled
-content gate, and the aggregation.
-
-The human reference reported in the paper uses allowances 1 and 2 with the pre-anchor
-tolerance of the systems (1.0 s). The variants with ``--pre-tol inf`` are additional.
-
-Sub-commands:
-
-  convert           tool export -> preds.jsonl, items.txt, human_wall_latency.jsonl
-  reaction-latency  delay statistics of the human run and the shift used by shift-a
-  shift-a           preds.jsonl -> preds_shiftedA.jsonl (allowance 2)
-  score             scoring with allowance 1, optionally allowance 3
-  compare           human run and systems aggregated over the items of the human run
-
-Input of ``convert``: a JSON object with the key ``results`` that maps item_id to
-{item_id, video_id, capability, time_type, interaction_type, question_time_s,
-updates: [{video_time_s, wall_ms_since_question, answer, at}], ...}.
-Conversion rules: every update becomes one emission at t = video_time_s (the stream
-clock the participant was watching) with the answer text unchanged; updates with an
-empty answer are dropped; emissions are sorted by t; an item without any non-empty
-update is written with an empty emission list (silent); no latency_s is attached
-(wall_ms_since_question is kept in the side file human_wall_latency.jsonl). The name
-of the participant in the export is not copied into the output.
-
-Upstream checkpoint: the judge, e.g. https://huggingface.co/Qwen/Qwen3-14B, or stored
-verdicts replayed with ``--judge cache:<files>``.
-Environment: Python >= 3.10 and the ``interactionbench`` package; ``score`` with an
-``hf:`` judge also needs torch and transformers and a GPU.
-
-Commands used for the paper numbers:
-
-  python analysis/human_reference.py convert export.json
-  python analysis/human_reference.py reaction-latency --raw export.json
-  python analysis/human_reference.py shift-a
-  python analysis/human_reference.py score results/runs/human_reference/preds_shiftedA.jsonl \
-      --judge hf:Qwen/Qwen3-14B --judge-cache results/judge_cache/qwen3-14b_v2.jsonl \
-      --pre-tol 1.0 --eval-name eval_judge_mcqtext_shiftedA_pretol1
-  python -m interactionbench eval results/runs/human_reference/preds.jsonl \
-      --items results/runs/human_reference/items.txt --mcq-key \
-      --out results/runs/human_reference/eval_nojudge
-  python analysis/human_reference.py compare
-
-Outputs:
-  <runs_root>/human_reference/{preds.jsonl,items.txt,human_wall_latency.jsonl}
-  <runs_root>/human_reference/preds_shiftedA.jsonl
-  <runs_root>/human_reference/<eval_name>/{summary.json,records.jsonl}
-  <out>/reaction_offset.json
-  <out>/human_first300.json
-"""
+"""Human reference: conversion, scoring variants and comparison with systems."""
 
 from __future__ import annotations
 
@@ -102,8 +24,6 @@ METRICS = ["total_score", "accuracy", "timing_accuracy", "silence_compliance"]
 def human_dir(args) -> Path:
     return Path(args.runs_root) / args.human_run
 
-
-# ------------------------------------------------------------------ convert
 
 def cmd_convert(args) -> None:
     d = json.loads(Path(args.raw).read_text(encoding="utf-8"))
@@ -140,8 +60,6 @@ def cmd_convert(args) -> None:
           f"pre_query_updates={n_pre} broken_flag={n_broken}", file=sys.stderr)
 
 
-# ------------------------------------------------------------------ reaction latency
-
 def _load_human(args):
     from interactionbench.data import iter_items, load_benchmark
 
@@ -167,7 +85,6 @@ def cmd_reaction_latency(args) -> None:
         return {"n": n, "median": round(st.median(xs), 2), "mean": round(st.mean(xs), 2),
                 "p25": round(xs[n//4], 2), "p75": round(xs[(3*n)//4], 2), "min": round(xs[0], 2), "max": round(xs[-1], 2)}
     res = {}
-    # question-answer items: first emission after the question
     for label, caps in (("IVQA_A", {"IVQA"}), ("IVQA+LVM_A", {"IVQA", "LVM"}), ("CIR_B", {"CIR"})):
         d_stream, d_wall, n_silent, n_pre = [], [], 0, 0
         for iid, it in items.items():
@@ -184,7 +101,6 @@ def cmd_reaction_latency(args) -> None:
                 d_wall.append(min(u["wall_ms_since_question"] for u in ups) / 1000.0)
         res[label] = {"first_emission_delay_stream_s": q(d_stream), "first_update_wall_s": q(d_wall),
                       "silent_items": n_silent, "pre_query_emissions": n_pre}
-    # trigger items: delay of the matched emission of every event (no gate, as in the scorer)
     cfg = MetricConfig()
     for label, sel in (("PTR_INS", lambda it: it.capability == "PTR" and it.interaction_type == "INS"),
                        ("PTR_all", lambda it: it.capability == "PTR"),
@@ -212,8 +128,6 @@ def cmd_reaction_latency(args) -> None:
     print("wrote", out)
 
 
-# ------------------------------------------------------------------ shift-a
-
 def cmd_shift_a(args) -> None:
     H, _, keep, items = _load_human(args)
     if args.shift is not None:
@@ -232,8 +146,6 @@ def cmd_shift_a(args) -> None:
         p["run"] = f"{args.human_run}_shiftedA"; lines.append(json.dumps(p, ensure_ascii=False))
     (H / "preds_shiftedA.jsonl").write_text("\n".join(lines) + "\n"); print("A-type items shifted:", nA, "shift", shift)
 
-
-# ------------------------------------------------------------------ score
 
 def cmd_score(args) -> None:
     from interactionbench.data import iter_items, load_benchmark
@@ -255,8 +167,6 @@ def cmd_score(args) -> None:
             key[k["item_id"]] = k["answer_text"]
 
     def mcq_text_judge(answer_text: str):
-        # same judge, same prompt; the reference is the text of the correct option
-        # (the option matcher also ignores the annotated reference answer)
         return lambda question, gt, pred: judge(question, answer_text, pred)
 
     cfg = MetricConfig() if args.pre_tol is None else MetricConfig(pre_tol_s=args.pre_tol)
@@ -308,8 +218,6 @@ def cmd_score(args) -> None:
     print(f"wrote {out}/records.jsonl and {out}/summary.json")
 
 
-# ------------------------------------------------------------------ compare
-
 def cmd_compare(args) -> None:
     HUMAN = human_dir(args)
     ev_nj, ev_j = args.eval_name, args.judge_eval_name
@@ -351,7 +259,6 @@ def cmd_compare(args) -> None:
     jd = HUMAN / ev_hj / "records.jsonl"
     if jd.exists(): res["human"][ev_hj] = full(load(jd))
 
-    # multiple choice: answered by letter or by text (same letter pattern as the option scorer)
     key = {}
     for l in Path(args.mcq_key).read_text(encoding="utf-8").splitlines():
         if l.strip():
@@ -391,7 +298,6 @@ def cmd_compare(args) -> None:
                 res["systems"][s][ev]["overall"]["n_missing_in_records"] = len(iset) - len(r)
     out = Path(args.out) / "human_first300.json"
     out.write_text(json.dumps(res, indent=1, ensure_ascii=False), encoding="utf-8")
-    # compact console table
     def row(name, o): return f'{name:48s} n={o["n_items"]:3d} Total={o["total_score"]} Acc={o["accuracy"]} TA={o["timing_accuracy"]} SC={o["silence_compliance"]}'
     print(row("HUMAN nojudge", res["human"][ev_nj]["overall"]))
     for s in res["systems"]:
@@ -399,8 +305,6 @@ def cmd_compare(args) -> None:
     print("MCQ diag", json.dumps(res["human"]["mcq_diag"], ensure_ascii=False)[:1500])
     print("wrote", out)
 
-
-# ------------------------------------------------------------------ cli
 
 def _base(p: argparse.ArgumentParser) -> None:
     add_common_args(p)

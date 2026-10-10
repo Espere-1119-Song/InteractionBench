@@ -1,15 +1,4 @@
-"""Systems under test: adapters, the model zoo, and ``build_model``.
-
-Four ways to evaluate a system, from least to most code:
-
-1. A zoo name:                 ``build_model("qwen3vl-8b")``
-2. Any Hugging Face chat VLM:  ``build_model("hf:<repo-or-path>", model_cls=..., image_style=...)``
-   Any OpenAI-compatible API:  ``build_model("api:<model>", base_url=..., api_key_env=...)``
-3. A config file:              ``load_model_configs("my_models.json")`` then a name from it
-4. Your own adapter class:     subclass ``ChatModel``, ``@register_adapter("mine")``,
-                               then ``build_model("mine:<anything>")``; or pass the class
-                               path directly, ``build_model("my_pkg.my_mod:MyModel")``
-"""
+"""Systems under test: adapters, the model zoo, and ``build_model``."""
 
 from __future__ import annotations
 
@@ -22,8 +11,6 @@ from ..registry import Registry, import_object
 from .base import ChatModel, Generation, TurnBasedVLM, collect_images  # noqa: F401
 from .zoo import ALIASES, MODEL_ZOO
 
-# adapter name -> factory(**config) -> ChatModel. Factories import lazily so that
-# scoring and API-only use never import torch.
 ADAPTERS: Registry[Callable[..., ChatModel]] = Registry("model adapter")
 
 
@@ -53,24 +40,16 @@ ADAPTERS.register("hf-text", _hf_text)
 ADAPTERS.register("minicpmo", _minicpmo)
 ADAPTERS.register("api", _api)
 
-# adapters that run locally on a GPU (the rest are remote endpoints)
 _LOCAL_ADAPTERS = {"hf-vlm", "hf", "hf-text", "minicpmo"}
-# config key that receives the part after "adapter:" in a spec such as "hf:<repo>"
 _SPEC_TARGET = {"api": "model"}
 
 
 def register_adapter(name: str, factory: Callable[..., ChatModel] | None = None, *,
                      overwrite: bool = False):
-    """Register an adapter class or factory. Usable as a decorator.
-
-    The factory is called with the model configuration as keyword arguments; for a
-    spec ``<name>:<value>`` the value arrives as ``repo`` (``model`` for API adapters).
-    """
     return ADAPTERS.register(name, factory, overwrite=overwrite)
 
 
 def register_model(name: str, config: dict, *, overwrite: bool = False) -> None:
-    """Add a named configuration: ``{"adapter": ..., **adapter_kwargs}``."""
     if name in MODEL_ZOO and not overwrite:
         raise ValueError(f"model '{name}' is already registered")
     if "adapter" not in config:
@@ -79,10 +58,9 @@ def register_model(name: str, config: dict, *, overwrite: bool = False) -> None:
 
 
 def load_model_configs(path: str | Path, *, overwrite: bool = True) -> list[str]:
-    """Register every entry of a JSON (or YAML) file mapping name -> config."""
     text = Path(path).read_text(encoding="utf-8")
     if str(path).endswith((".yaml", ".yml")):
-        import yaml  # optional dependency
+        import yaml
         data = yaml.safe_load(text)
     else:
         data = json.loads(text)
@@ -100,18 +78,14 @@ def resolve_name(name: str) -> str:
 
 
 def _relax_cudnn_attention() -> None:
-    # cuDNN scaled-dot-product attention allocates a large workspace and fails near
-    # GPU capacity ("mha_graph.execute ... is_good()"). The flash and memory-efficient
-    # kernels stay enabled.
     try:
         import torch
         torch.backends.cuda.enable_cudnn_sdp(False)
-    except Exception:  # older torch or no CUDA backend
+    except Exception:
         pass
 
 
 def resolve_config(spec: str, model_path: str | None = None, **overrides) -> dict:
-    """Turn a model spec into the final adapter configuration (no model is loaded)."""
     key = resolve_name(spec)
     if key in MODEL_ZOO:
         cfg = dict(MODEL_ZOO[key])
@@ -141,15 +115,6 @@ def resolve_config(spec: str, model_path: str | None = None, **overrides) -> dic
 
 
 def build_model(spec: str, model_path: str | None = None, **overrides) -> ChatModel:
-    """Build a system under test.
-
-    Args:
-        spec: zoo name, ``<adapter>:<id>`` (``hf:<repo>``, ``hf-text:<repo>``,
-            ``api:<model>``, or a registered adapter), or ``module:Class``.
-        model_path: local checkpoint directory replacing the repo id, e.g. a
-            fine-tuned copy of a zoo model.
-        **overrides: adapter keyword arguments that replace the configured ones.
-    """
     cfg = resolve_config(spec, model_path=model_path, **overrides)
     path = cfg.pop("adapter_path", None)
     if path is not None:

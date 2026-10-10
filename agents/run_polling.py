@@ -1,63 +1,5 @@
 #!/usr/bin/env python3
-"""Setting 1: online polling evaluation of a visual agent.
-
-What it does
-  Every --interval seconds of stream time one complete agent session is started. The
-  session receives the video trimmed to the current stream time, the agent's own
-  previous utterances (the last three), the question, and the instruction to answer
-  SPEAK or WAIT. Remaining silent is the instructed default. A SPEAK decision with a
-  non-empty response becomes an emission at the tick time.
-  Tick schedule: for items of time type A the ticks run from question_time_s to
-  min(duration, question_time_s + --a-window); for all other items from --interval to
-  the video duration. The clip of a tick is cut with ffmpeg (libx264, preset veryfast,
-  crf 27, no audio) to max(t, 1.0) seconds and deleted after the session.
-  One session per tick is expensive, so the paper runs this setting on the fixed
-  103-item subset (benchmark/splits/subset103.txt).
-
-Harnesses (--harness)
-  claude   Claude Code CLI:  claude -p PROMPT --mcp-config <agent-home>/.mcp.json
-           --allowedTools <seven Qwen-MM-Plugins tools> --model MODEL
-           with --no-mcp:    claude -p PROMPT --strict-mcp-config
-           --tools Bash,Read,Glob,Grep,Write,Edit
-           --allowedTools Bash,Read,Glob,Grep,Write,Edit --model MODEL
-  gemini   Gemini CLI:       gemini -p PROMPT --yolo   (GEMINI_CLI_TRUST_WORKSPACE=true;
-           MCP server and excluded tools come from <agent-home>/.gemini/settings.json)
-  openai   agents/openai_agent.py PROMPT  (OpenAI-compatible tool-calling loop)
-
-Upstream code
-  Qwen-MM-Plugins, https://github.com/QwenLM/Qwen-MM-Plugins (capability "core",
-  started through `uvx`); the path of the checkout is read from QWEN_MM_PLUGINS_ROOT.
-  The checkout used with this script was version 1.0.8 (commit ab339d2).
-
-Environment
-  Python 3.10 or later with the interactionbench package (repository root), ffmpeg
-  with libx264, uv (for uvx), and the CLI of the chosen harness (claude, gemini) or the
-  variables of agents/openai_agent.py. API keys are read from the environment by the
-  CLI tools themselves (ANTHROPIC_API_KEY, GEMINI_API_KEY). The source records no
-  version of the claude and gemini command line tools.
-
-Commands used for the paper (run from the repository root)
-  claude_qwenmm_polling_iv1, claude_qwenmm_polling_iv1_v2 (two runs, same settings):
-    python agents/run_polling.py --harness claude --jobs 6 --timeout 240 \
-        --items benchmark/splits/subset103.txt --model sonnet \
-        --out results/runs/claude_qwenmm_polling_iv1_v2
-  claude_builtin_polling_iv1:
-    python agents/run_polling.py --harness claude --jobs 6 --timeout 240 \
-        --items benchmark/splits/subset103.txt --model sonnet --no-mcp --item-cwd \
-        --out results/runs/claude_builtin_polling_iv1
-  gemini_qwenmm_polling_iv1:
-    python agents/run_polling.py --harness gemini --jobs 12
-  openai_qwenmm_polling_iv1:
-    python agents/run_polling.py --harness openai --jobs 6
-
-Output
-  <out>/preds.jsonl      one line per item (evaluator schema), appended; a rerun skips
-                         the items already present
-  <out>/raw/<item>.json  every tick: time, decision, latency, last 150 characters of
-                         the agent output
-  <out>/config.json      configuration of the last invocation
-  Default <out>: results/runs/<harness>_qwenmm_polling_iv<interval>
-"""
+"""Setting 1: online polling evaluation of a visual agent."""
 import argparse
 import hashlib
 import json
@@ -72,15 +14,11 @@ from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-# Set in main(): HE is the agent home directory (working directory of the agent
-# sessions), VID the directory of the H.264 videos, TRIM the directory of tick clips.
 HE = VID = TRIM = ""
 LETTERS = "ABCDEF"
 CLAUDE_TOOLS = ",".join(
     f"mcp__qwen-mm-plugins-core__{t}" for t in
     ("read_video", "read_image", "media_info", "crop", "draw_bbox", "visualize", "save_view"))
-# --no-mcp: the built-in tools of Claude Code only, no Qwen-MM-Plugins toolbox. Web and
-# sub-agent tools are not in the list; the agent has to extract frames itself.
 CLAUDE_BUILTIN_TOOLS = "Bash,Read,Glob,Grep,Write,Edit"
 
 SYSTEM = ("You are a real-time visual assistant watching a LIVE video stream. "
@@ -129,9 +67,6 @@ def q_text(it):
         return it["question"]
     opts = "\n".join(f"{LETTERS[k]}. {o}"
                      for k, o in enumerate(it["mcq"]["options"]))
-    # The question line is the annotation question. The "stem" field of the options
-    # file is not used in this setting: the paper runs were produced with the
-    # annotation question, and the two texts differ for part of the items.
     stem = it["question"]
     return f"{stem}\n{opts}\n(When you speak, answer with just the option letter.)"
 
@@ -146,8 +81,6 @@ def trim(src, t, dst):
 
 
 DEC_RE = re.compile(r"DECISION:\s*(SPEAK|WAIT)", re.I)
-# An agent can repeat the format template verbatim as its response (frequent with the
-# gemini harness). Such a response is dropped in parsing.
 PLACEHOLDER = "if SPEAK, one short line"
 RESP_RE = re.compile(r"RESPONSE:\s*(.*)", re.I | re.S)
 
@@ -169,9 +102,6 @@ def agent_call(harness, prompt, timeout, cwd=None, mcp=True, model="sonnet"):
     else:
         cmd = ["gemini", "-p", prompt, "--yolo"]
         env = dict(os.environ, GEMINI_CLI_TRUST_WORKSPACE="true")
-    # A session that times out can leave child processes behind (node, the MCP server
-    # started by uvx). The session is started in its own process group and the whole
-    # group is killed on timeout.
     proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, text=True,
                             start_new_session=True)
@@ -230,8 +160,6 @@ def main():
     sys.path.insert(0, HERE)
     from common import capability_roundrobin, check_agent_setup
 
-    # Absolute paths: the agent runs in <agent-home> and receives the clip path in
-    # the prompt.
     HE = os.path.abspath(args.agent_home)
     VID = os.path.abspath(args.video_dir or f"{args.data}/videos_h264")
     TRIM = f"{HE}/videos_tick"
@@ -320,7 +248,7 @@ def main():
                 resp = (rm.group(1).strip().splitlines()[0].strip()
                         if rm and rm.group(1).strip() else "")
             if resp and PLACEHOLDER in resp:
-                resp = ""  # format-template echo, never a real utterance
+                resp = ""
             polls.append({"t": round(t, 2), "spoke": spoke,
                           "latency_s": lat, "raw": raw[-150:]})
             if spoke and resp:

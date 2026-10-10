@@ -16,8 +16,6 @@ def _annotation(video_id, duration, items):
 
 @pytest.fixture()
 def bench(tmp_path):
-    """Four items over two videos: an A-type question, a B-type trigger with options,
-    a counting stream and a negative item."""
     root = tmp_path / "data"
     videos = {
         "vidAAAAAAAA": (20.0, [
@@ -57,8 +55,6 @@ def bench(tmp_path):
 
 
 class Img:
-    """Stand-in for a PIL image."""
-
     def __init__(self, t):
         self.t = t
 

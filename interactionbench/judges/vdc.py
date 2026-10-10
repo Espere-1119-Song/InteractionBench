@@ -1,18 +1,4 @@
-"""Decomposition scoring for free-form text (VDCScore style, AuroraCap, arXiv 2410.03051).
-
-Optional alternative to the binary judgment for free-form outputs (LCG / BRC segments
-and open-ended retrospective answers):
-
-  1. decompose the REFERENCE text into short question-answer pairs (generated once,
-     cached by reference content, shared across all evaluated systems);
-  2. answer each question using ONLY the candidate text;
-  3. judge each answer against the reference answer (binary);
-  4. score = fraction of pairs answered correctly.
-
-Timing and coverage stay in Decision Timing (metrics.py); this only changes the content
-comparison. Enable it by wrapping any judge: ``--judge vdc:hf:<model>`` or
-``--judge vdc:api:<model>``. The paper protocol uses the plain binary judge.
-"""
+"""Decomposition scoring for free-form text (VDCScore style, AuroraCap, arXiv 2410.03051)."""
 from __future__ import annotations
 
 import hashlib
@@ -79,24 +65,16 @@ class _JsonlCache:
 
 
 class VDCScorer:
-    """Wraps an engine judge (anything with ._generate(prompt) -> str).
-
-    Plain-call signature stays the binary judge (used by trigger gates);
-    .vdc(question, gt, pred) is the decomposition score in [0, 1]."""
-
     def __init__(self, engine, pairs_cache: str | None = None,
                  step_cache: str | None = None,
                  cache_dir: str = "results/judge_cache", **_ignored):
         self.engine = engine
         self.name = f"vdc:{engine.name}"
-        # cache files are namespaced by judge engine: question-answer pairs and step
-        # verdicts from one judge model must never be reused by another
         slug = re.sub(r"[^A-Za-z0-9.-]+", "_", getattr(engine, "name", "judge"))
         self.pairs = _JsonlCache(Path(pairs_cache or f"{cache_dir}/vdc_pairs_{slug}.jsonl"))
         self.steps = _JsonlCache(Path(step_cache or f"{cache_dir}/vdc_steps_{slug}.jsonl"))
         self.n_calls = 0
 
-    # gates and any legacy call sites keep plain binary judgment
     def __call__(self, question: str, gt: str, pred: str) -> float:
         return self.engine(question, gt, pred)
 
@@ -118,7 +96,7 @@ class VDCScorer:
                          if str(q).strip() and str(a).strip()][:5]
             except (json.JSONDecodeError, TypeError, ValueError):
                 pairs = []
-        if not pairs:  # degenerate reference -> single identity pair
+        if not pairs:
             pairs = [[question or "What does the reference state?", gt]]
         self.pairs.put(k, pairs)
         return pairs

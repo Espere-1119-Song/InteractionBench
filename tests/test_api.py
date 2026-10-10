@@ -1,4 +1,4 @@
-"""API model and API judge against a local stand-in server. No external request is made."""
+"""API model and API judge against a local stand-in server."""
 
 import json
 import threading
@@ -79,7 +79,7 @@ def test_api_judge(server, tmp_path, monkeypatch):
     cache = tmp_path / "j.jsonl"
     j = make_judge("api:judge-model", cache_path=cache, base_url=server)
     assert j("q", "a blue cup", "the cup is blue") == 1.0
-    assert j("q", "a blue cup", "the cup is blue") == 1.0          # second call served by the cache
+    assert j("q", "a blue cup", "the cup is blue") == 1.0
     assert len(_Handler.requests) == 1 and _Handler.requests[0]["auth"] == "Bearer jk"
     assert "Ground-truth answer:\na blue cup" in _Handler.requests[0]["body"]["messages"][0]["content"]
     assert len(cache.read_text().splitlines()) == 1

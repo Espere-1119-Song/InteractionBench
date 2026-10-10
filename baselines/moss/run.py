@@ -1,38 +1,4 @@
-"""Run MOSS-Video-Preview (realtime-SFT) natively-streaming over InteractionBench.
-
-MOSS consumes frames from an image_queue at REAL-TIME pace (we sleep 1/fps per
-frame, as in the official realtime_streaming_infer.py) and emits tokens
-continuously: <|silence|> while observing, text tokens when speaking. Stream
-time is therefore wall-clock since feed start; an emission's t is the moment
-its first token appears. This measures the system's genuine real-time
-behaviour (a 60s video takes ~60s to evaluate).
-
-Item protocol (mirrors the other runners):
-  B/C  prompt pushed ~1s after feed start (official demo timing)
-  A    prompt pushed when the stream reaches question_time_s; feed stops at
-       question_time + --a-window
-
-Upstream:
-  code        https://github.com/OpenMOSS/MOSS-Video-Preview
-  checkpoint  OpenMOSS-Team/moss-video-preview-realtime-sft
-              (https://huggingface.co/OpenMOSS-Team/moss-video-preview-realtime-sft)
-  The model code is loaded from the checkpoint with trust_remote_code=True, so
-  no checkout of the code repository is needed. --model (or the environment
-  variable MOSS_MODEL) takes a repository id or a local directory.
-
-Environment:
-  A dedicated environment with torch 2.4 and transformers 4.46, plus the `av`
-  package (required by the remote code of the checkpoint) and an ffmpeg binary
-  on PATH. See README.md in this directory.
-
-Command used for the paper numbers (218-item subset, earlier multiple-choice
-file; see README.md):
-  python baselines/moss/run.py \\
-      --items benchmark/splits/frozen218.txt --mcq
-
-Output:
-  results/runs/moss-video-preview_streaming_rt[_mcq]/preds.jsonl   (or under --out)
-"""
+"""Run MOSS-Video-Preview (realtime-SFT) natively-streaming over InteractionBench."""
 
 from __future__ import annotations
 
@@ -76,7 +42,6 @@ def stream_item(model, processor, item, frames, *, fps: float, a_window: float,
         for f in feed:
             if stop_feed.is_set():
                 return
-            # pace the stream: wait until wall clock reaches this frame's time
             delay = f.time - (time.perf_counter() - t0)
             if delay > 0:
                 time.sleep(delay)
@@ -84,7 +49,7 @@ def stream_item(model, processor, item, frames, *, fps: float, a_window: float,
                 prompt_q.put(question)
                 sent_prompt = True
             image_q.put(f.image)
-        if not sent_prompt:  # question lands at/after the last frame (A-type)
+        if not sent_prompt:
             prompt_q.put(question)
 
     gen_err = []
@@ -94,17 +59,16 @@ def stream_item(model, processor, item, frames, *, fps: float, a_window: float,
             model.real_time_generate(image_q, prompt_q, token_q, processor,
                                      max_new_tokens=max_new_tokens,
                                      do_sample=False)
-        except Exception as e:  # surfaced in the result
+        except Exception as e:
             gen_err.append(str(e)[:300])
 
     threading.Thread(target=feeder, daemon=True).start()
     threading.Thread(target=generator, daemon=True).start()
 
-    # Consume tokens; group into timed utterances.
     emissions = []
     cur_tokens: list[str] = []
     cur_t = None
-    feed_wall = end_s + 8.0  # listen until stream end + grace
+    feed_wall = end_s + 8.0
     while (time.perf_counter() - t0) < feed_wall:
         try:
             tok = token_q.get(timeout=0.25)
@@ -128,8 +92,6 @@ def stream_item(model, processor, item, frames, *, fps: float, a_window: float,
     if cur_tokens:
         emissions.append({"t": round(cur_t, 2),
                           "content": "".join(cur_tokens).strip()})
-    # strip special markers; drop pre-prompt chatter (the official listener
-    # discards tokens generated before the prompt round starts)
     import re as _re
     cleaned = []
     for e in emissions:

@@ -1,38 +1,4 @@
-"""Run VideoLLM-online-8B-v1plus over InteractionBench.
-
-Proactive streaming via the frame-interval-token gate (threshold 0.725, the value
-set by the upstream ``demo/inference.py``): after each frame the model either keeps
-the stream token (silent) or starts generating; `video_time` is native.
-
-Upstream: https://github.com/showlab/videollm-online (this script imports
-``demo/inference.py`` and ``data/utils.py`` from a checkout; pass its location with
---repo or the environment variable VLLMONLINE_REPO).
-Checkpoint: LoRA chenjoya/videollm-online-8b-v1plus on the base LLM
-NousResearch/Meta-Llama-3-8B-Instruct (a mirror of meta-llama/Meta-Llama-3-8B-Instruct)
-with the vision encoder google/siglip-large-patch16-384.
-
-Input fps: 8. The upstream repository notes that inference supports up to about
-10 fps; the model was trained at 2 fps. Each video is resampled once with ffmpeg
-into a cache directory (--cache-dir). The upstream helper calls ``./ffmpeg/ffmpeg``
-relative to the working directory, so that path must exist where the runner is
-started (for example a symbolic link to the system ffmpeg).
-
-Known behaviour: the outputs are in the style of Ego4D narration; the model often
-ignores the question text and narrates egocentrically. Recorded as-is.
-
-Environment (versions of the paper run): Python 3.10, torch 2.7.1 (CUDA 12.8),
-torchvision 0.22.1, torchaudio 2.7.1, transformers 4.55.4, peft 0.20.0,
-accelerate 1.14.0, av 12.3.0; see README.md.
-
-Command used for the paper numbers (run directory
-videollm-online-8b_streaming_8fps_mcq):
-  python baselines/videollm_online/run.py --mcq --fps 8
-
-Output: <out>/preds.jsonl (one line per item, appended, resumable),
-<out>/raw/<video_id>#<item_index>.json, <out>/config.json and
-<out>/fail_counts.json (number of failed attempts per item).
-Default <out>: results/runs/videollm-online-8b_streaming_<fps>fps[_mcq].
-"""
+"""Run VideoLLM-online-8B-v1plus over InteractionBench."""
 from __future__ import annotations
 
 import argparse
@@ -125,7 +91,6 @@ def main() -> None:
         "started_at": datetime.now(timezone.utc).isoformat(),
     }, indent=1))
 
-    # LiveInfer parses CLI args itself
     sys.argv = ["run_videollm_online",
                 "--resume_from_checkpoint", args.checkpoint,
                 "--llm_pretrained", args.llm,
@@ -149,9 +114,6 @@ def main() -> None:
         if it.item_id in done:
             continue
         if fail_counts.get(it.item_id, 0) >= 3:
-            # deterministic failure (a very long LCG item trips the stream-token
-            # assertion): record the item as failed so that the run can terminate;
-            # it is scored as silence/miss per protocol
             pred = {"video_id": it.video_id, "item_index": it.item_index,
                     "model": "videollm-online-8b", "run": run_tag,
                     "emissions": [], "n_polls": 0, "poll_latencies": [],

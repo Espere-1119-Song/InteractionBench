@@ -1,47 +1,5 @@
 #!/usr/bin/env python3
-"""Rank stability of the system ranking under other delay bounds (Kendall tau).
-
-Input: one evaluation per run and per delay bound Delta in (2, 3, 5, 8, 10) seconds,
-stored as <sweep_dir>/<run>_d<Delta>/summary.json. The runs are the directories that
-have a ``_d5`` evaluation; a run enters the analysis only when all five evaluations
-exist.
-
-The evaluations of the runs named in ``--runs`` are created first when they are
-missing (library call of the evaluator with ``--pre-tol``, ``--judge``, ``--items``
-and the five values of Delta). The same evaluation from the command line:
-
-  for d in 2 3 5 8 10; do
-    python -m interactionbench eval results/runs/$RUN/preds.jsonl \
-        --data data/interactionbench --mcq-key --pre-tol 1.0 --delta $d \
-        --judge ensemble:qwen_qwen3-14b --out results/analysis/delta_sweep/${RUN}_d$d
-  done
-
-Runs that cover the 103-item subset only are scored with
-``--items benchmark/splits/subset103.txt``; call the script once per item list and
-once more without ``--runs`` for the analysis over everything in the sweep directory.
-
-For every Delta the script reports, against the ranking at the default Delta = 5 s:
-
-  tau_overall      Kendall tau (tau-a over pairs that are not tied in either list)
-                   between the overall totals at Delta and at 5 s
-  tau_timing       the same for timing accuracy
-  max_rank_shift   largest change of rank of any run (ranks by descending total)
-  top3_same        whether the set of the three best runs is unchanged
-  mean_overall     mean total over the runs
-
-Upstream repository or checkpoint: none. Environment: Python >= 3.10; no GPU.
-
-Commands used for the paper numbers (26 configurations, stored judge verdicts):
-
-  python analysis/rank_stability.py --runs full_runs.txt --pre-tol 1.0 \
-      --judge ensemble:qwen_qwen3-14b
-  python analysis/rank_stability.py --runs subset_runs.txt --pre-tol 1.0 \
-      --judge ensemble:qwen_qwen3-14b --items benchmark/splits/subset103.txt
-
-Outputs:
-  <out>/kendall.csv    one row per Delta
-  <out>/per_run.csv    totals and timing accuracy of every run at every Delta
-"""
+"""Rank stability of the system ranking under other delay bounds (Kendall tau)."""
 
 from __future__ import annotations
 

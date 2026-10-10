@@ -1,59 +1,5 @@
 #!/usr/bin/env python3
-"""Judge calibration: candidate open judges against stored reference verdicts.
-
-A judge grades a (question, reference answer, model answer) triple with 0 or 1. The
-reference labels of this calibration are the binary verdicts of an earlier reference
-judge (Gemini), stored with two runs as verdict files keyed by
-sha256(question, reference, answer). The field that holds them is named ``gemini``.
-
-Sub-commands:
-
-  extract   Rebuild the triples. The verdict files store only the hash of a triple, so
-            the triples are recovered by scoring the predictions of the runs with a
-            recording judge. Writes <calib_dir>/triples.jsonl with
-            {k, question, gt, pred, gemini, run}; ``gemini`` is null when the triple
-            has no reference verdict.
-  run       Score the labelled triples with each candidate judge (one verdict file per
-            candidate) and write agreement, Cohen's kappa, true positive and true
-            negative rate, agreement per run and seconds per call.
-  votes     For one local Hugging Face judge: one greedy verdict and K sampled verdicts
-            per labelled triple (default K = 5, temperature 0.7, top-p 0.95, at most
-            384 new tokens). Needs a GPU. Resumable.
-  analyze   The majority-vote table: per judge the agreement and kappa of the greedy
-            verdict and of the majority of K votes (a tie falls back to the greedy
-            verdict), the share of triples with unanimous votes, kappa between judges,
-            and ensembles over judges. Only vote files with at least 900 rows are
-            used, and only triples present in all of them.
-  tables    Print, for every run with a judged evaluation, the per-task rows of its
-            summary, and the mean scores of selected full-set runs restricted to an
-            item subset.
-
-Judges are built with ``interactionbench.judges.make_judge``; see that module for the
-spec syntax (hf:<model_id>, api:<model>, ...).
-
-Upstream checkpoints: the candidate judges are loaded from the Hugging Face Hub by
-model id, e.g. https://huggingface.co/Qwen/Qwen3-14B (the paper judge). API judges
-read their key from the environment variable named by the judge
-(IBENCH_JUDGE_API_KEY by default).
-Environment: Python >= 3.10 and the ``interactionbench`` package; ``run`` and ``votes``
-with an ``hf:`` judge also need torch and transformers and a GPU.
-
-Commands used for the paper numbers (grading prompt v2):
-
-  python analysis/judge_calibration.py extract
-  python analysis/judge_calibration.py run hf:Qwen/Qwen3-14B --judge-prompt v2
-  python analysis/judge_calibration.py votes hf:Qwen/Qwen3-14B --judge-prompt v2
-  python analysis/judge_calibration.py analyze
-  python analysis/judge_calibration.py tables --eval-name eval_judge
-
-Outputs (calib_dir defaults to <out>/judge_calib):
-  <calib_dir>/triples.jsonl
-  <calib_dir>/cache_<slug>[_prompt<version>].jsonl      verdicts of a candidate
-  <calib_dir>/report_<slug>.json, disagree_<slug>.jsonl
-  <calib_dir>/votes_<slug>_prompt<version>.jsonl
-  <calib_dir>/vote_table.csv, vote_report.md
-  <out>/judge_vote_table.tex
-"""
+"""Judge calibration: candidate open judges against stored reference verdicts."""
 
 from __future__ import annotations
 
@@ -82,8 +28,6 @@ MIN_VOTE_ROWS = 900
 def slug_of(spec: str) -> str:
     return re.sub(r"[^A-Za-z0-9.-]+", "_", spec.split(":", 1)[-1])
 
-
-# ------------------------------------------------------------------ extract
 
 class Recorder:
     def __init__(self, cache): self.cache = cache; self.rows = {}
@@ -127,8 +71,6 @@ def cmd_extract(args) -> None:
     print(f"total triples {n_all}, with gemini label {n_lab} -> {out}")
 
 
-# ------------------------------------------------------------------ run
-
 def cmd_run(args) -> None:
     from interactionbench.judges import make_judge
 
@@ -167,21 +109,18 @@ def cmd_run(args) -> None:
                "sec_per_call": round(dt / calls, 3) if calls else None, "uncached_calls": calls}
         Path(f"{cd}/report_{slug}.json").write_text(json.dumps(rep, indent=2, ensure_ascii=False))
         print(json.dumps(rep, ensure_ascii=False), flush=True)
-        # disagreements, for inspection
         with Path(f"{cd}/disagree_{slug}.jsonl").open("w") as f:
             for p, r in zip(pred, lab):
                 if p != r["gemini"]:
                     f.write(json.dumps({**{k: r[k] for k in ("question", "gt", "pred", "run")}, "gemini": r["gemini"], "judge": p}, ensure_ascii=False) + "\n")
         del judge
-        try:  # release GPU memory before the next candidate
+        try:
             import gc
             import torch
             gc.collect(); torch.cuda.empty_cache()
         except ImportError:
             pass
 
-
-# ------------------------------------------------------------------ votes
 
 def cmd_votes(args) -> None:
     import torch
@@ -202,7 +141,6 @@ def cmd_votes(args) -> None:
     if not lab:
         sys.exit(0)
 
-    # a local Hugging Face judge exposes .model and .processor
     judge = make_judge(args.spec, cache_path=f"{cd}/cache_{slug}_prompt{pv}.jsonl", prompt_version=pv)
     model, proc = judge.model, judge.processor
 
@@ -221,7 +159,7 @@ def cmd_votes(args) -> None:
         res = []
         for t in texts:
             if "</think>" in t: t = t.rsplit("</think>", 1)[1]
-            if "final" in t and "assistantfinal" in t.replace(" ", ""):  # channel markers left by gpt-oss
+            if "final" in t and "assistantfinal" in t.replace(" ", ""):
                 t = t.split("final", 1)[-1]
             res.append(t.strip())
         return res
@@ -250,8 +188,6 @@ def cmd_votes(args) -> None:
     print(f"done {len(lab)} in {time.time()-t0:.0f}s -> {out}", flush=True)
 
 
-# ------------------------------------------------------------------ analyze
-
 def kappa(a, b):
     n = len(a); acc = sum(x == y for x, y in zip(a, b)) / n
     pa = sum(a) / n; pb = sum(b) / n; pe = pa * pb + (1 - pa) * (1 - pb)
@@ -279,12 +215,11 @@ def cmd_analyze(args) -> None:
     for name, rows in judges.items():
         greedy = [rows[k]["greedy"] for k in common]
         votes = [rows[k]["votes"] for k in common]
-        m = [maj(v) if maj(v) is not None else rows[k]["greedy"] for v, k in zip(votes, common)]  # tie -> greedy
+        m = [maj(v) if maj(v) is not None else rows[k]["greedy"] for v, k in zip(votes, common)]
         a_g, k_g = kappa(greedy, gem); a_m, k_m = kappa(m, gem)
         unanimous = sum(len(set(v)) == 1 for v in votes) / len(votes)
         table.append({"judge": name, "greedy_agree": a_g, "greedy_kappa": k_g, "maj_agree": a_m, "maj_kappa": k_m,
                       "unanimous": unanimous, "pos_rate": sum(m) / len(m)})
-    # ensembles
     names = list(judges)
     mj = {n: [maj(judges[n][k]["votes"]) if maj(judges[n][k]["votes"]) is not None else judges[n][k]["greedy"] for k in common] for n in names}
     if len(names) >= 3:
@@ -296,7 +231,6 @@ def cmd_analyze(args) -> None:
         allv = [e if e is not None else gem[i] * 0 for i, e in enumerate(allv)]
         a, kp = kappa(allv, gem)
         table.append({"judge": f"ENSEMBLE majority over all votes ({len(names)} judges x K)", "greedy_agree": None, "greedy_kappa": None, "maj_agree": a, "maj_kappa": kp, "unanimous": None, "pos_rate": sum(allv) / len(allv)})
-    # ensemble over the three judges with the highest greedy kappa
     single = [r for r in table if not r["judge"].startswith("ENSEMBLE")]
     top3 = [r["judge"] for r in sorted(single, key=lambda r: -r["greedy_kappa"])[:3]]
     if len(top3) == 3:
@@ -308,11 +242,10 @@ def cmd_analyze(args) -> None:
         allv3 = [e if e is not None else mj[top3[0]][i] for i, e in enumerate(allv3)]
         a, kp = kappa(allv3, gem)
         table.append({"judge": "ENSEMBLE top-3, majority over all votes (3 x K)", "greedy_agree": None, "greedy_kappa": None, "maj_agree": a, "maj_kappa": kp, "unanimous": None, "pos_rate": sum(allv3) / len(allv3)})
-    if len(top3) == 3:  # one greedy verdict per judge, majority of 3 (3 calls per triple)
+    if len(top3) == 3:
         g3 = [maj([judges[n][k]["greedy"] for n in top3]) for k in common]
         a, kp = kappa(g3, gem)
         table.append({"judge": "ENSEMBLE top-3, majority of greedy verdicts (3 calls/triple)", "greedy_agree": None, "greedy_kappa": None, "maj_agree": a, "maj_kappa": kp, "unanimous": None, "pos_rate": sum(g3) / len(g3)})
-    # inter-judge kappa
     pairs = [(a, b, kappa(mj[a], mj[b])[1]) for a, b in itertools.combinations(names, 2)]
 
     with open(f"{cd}/vote_table.csv", "w", newline="") as f:
@@ -333,8 +266,6 @@ def cmd_analyze(args) -> None:
         f.write("\\bottomrule\n\\end{tabular}\n")
     print(open(f"{cd}/vote_report.md").read())
 
-
-# ------------------------------------------------------------------ tables
 
 def cmd_tables(args) -> None:
     ev = args.eval_name
@@ -372,8 +303,6 @@ def cmd_tables(args) -> None:
             return (round(st.mean(vals), 2), len(vals)) if vals else None
         print(run, "matched", len(sub), {k: mean(k) for k in ("total_score", "accuracy", "timing_accuracy", "silence_compliance")})
 
-
-# ------------------------------------------------------------------ cli
 
 def _base(p: argparse.ArgumentParser, multi_root: bool = False) -> None:
     add_common_args(p, multi_root=multi_root)

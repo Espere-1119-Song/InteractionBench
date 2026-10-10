@@ -13,7 +13,6 @@ class Registry(Generic[T]):
         self._items: dict[str, T] = {}
 
     def register(self, name: str, obj: T | None = None, *, overwrite: bool = False):
-        """Use as ``reg.register("name", obj)`` or as a decorator ``@reg.register("name")``."""
         def _add(o: T) -> T:
             if name in self._items and not overwrite:
                 raise ValueError(f"{self.kind} '{name}' is already registered")
@@ -34,7 +33,6 @@ class Registry(Generic[T]):
 
 
 def import_object(path: str):
-    """Resolve ``package.module:attr`` (or a ``file.py:attr`` path) to the object."""
     import importlib
     import importlib.util
     from pathlib import Path
@@ -58,7 +56,6 @@ _LOADED_PLUGINS: set[str] = set()
 
 
 def load_plugins(paths: list[str] | None) -> None:
-    """Import user files/modules so their ``register_*`` calls take effect."""
     import importlib
     import importlib.util
     import sys
@@ -67,7 +64,7 @@ def load_plugins(paths: list[str] | None) -> None:
     for p in paths or []:
         if p.endswith(".py") or "/" in p:
             fp = Path(p).resolve()
-            if str(fp) in _LOADED_PLUGINS:      # a plugin registers names once per process
+            if str(fp) in _LOADED_PLUGINS:
                 continue
             _LOADED_PLUGINS.add(str(fp))
             spec = importlib.util.spec_from_file_location(f"ibench_plugin_{fp.stem}", fp)

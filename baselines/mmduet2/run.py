@@ -1,34 +1,4 @@
-"""Run MMDuet2 over InteractionBench.
-
-MMDuet2 is a *proactive* streaming model: frames stream in (fps/decision_hz frames
-per turn, at least 2), and after each turn the model either replies or emits
-"NO REPLY". The reply moment is the decision signal; `time` is tracked natively by
-the upstream client.
-
-Item protocol (same as the other runners):
-  B/C  the standing request is injected as text before the first frame
-  A    frames stream silently until question_time_s, then the question text is
-       injected; polling continues to question_time + --a-window
-
-Upstream: https://github.com/yellow-binary-tree/MMDuet2 (this script imports
-``demo/api_server.py`` and ``proactive_eval/`` from a checkout; pass its location with
---repo or the environment variable MMDUET2_REPO).
-Checkpoint: wangyueqian/MMDuet2 (Hugging Face).
-
-Environment (versions of the paper run): Python 3.10, torch 2.7.1 (CUDA 12.8),
-torchvision 0.22.1, transformers 4.49.0, qwen-vl-utils[decord] 0.0.8, decord 0.6.0,
-accelerate 1.14.0, gradio 5.47.2; see README.md.
-
-Command used for the paper numbers (run directory
-mmduet2-3b_streaming_4fps_mcq_MERGED; the run was split into shards with --items and
-merged with ``ibench merge``):
-  python baselines/mmduet2/run.py --mcq --fps 4 --decision-hz 0.5 --max-frames 880 \
-      --out results/runs/mmduet2-3b_streaming_4fps_mcq
-
-Output: <out>/preds.jsonl (one line per item, appended, resumable),
-<out>/raw/<video_id>#<item_index>.json and <out>/config.json (the experiment setting).
-Default <out>: results/runs/mmduet2-3b_streaming_<fps>fps[_mcq].
-"""
+"""Run MMDuet2 over InteractionBench."""
 from __future__ import annotations
 
 import argparse
@@ -188,7 +158,6 @@ def main() -> None:
                 img = Image.fromarray(vr[idx].asnumpy())
                 img.thumbnail((448, 448))
                 t0 = time.perf_counter()
-                # api_server prints a debug line per frame; mute it
                 with contextlib.redirect_stdout(io.StringIO()):
                     r = client.add_image(img)
                 lat = time.perf_counter() - t0

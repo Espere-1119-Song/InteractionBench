@@ -24,9 +24,9 @@ def _items(bench):
 
 def test_ticks_standing_and_reveal(bench):
     items = _items(bench)
-    b = items["vidAAAAAAAA#1"]          # B-type, 20 s video
+    b = items["vidAAAAAAAA#1"]
     assert poll_ticks(b, 1.0, 10.0) == [float(t) for t in range(1, 21)]
-    a = items["vidAAAAAAAA#0"]          # A-type revealed at 15 s, window 10 s, video ends at 20 s
+    a = items["vidAAAAAAAA#0"]
     assert poll_ticks(a, 1.0, 10.0) == [15.0, 16.0, 17.0, 18.0, 19.0, 20.0]
     assert poll_ticks(a, 1.0, 2.0) == [15.0, 16.0, 17.0]
 
@@ -35,7 +35,7 @@ def test_question_is_hidden_before_reveal(bench, make_frames):
     a = _items(bench)["vidAAAAAAAA#0"]
     m = Recorder()
     polls = get_protocol("sliding").run_item(m, make_frames(20), a, a.question, ProtocolConfig())
-    assert [p["t"] for p in polls][0] == 15.0          # nothing is asked before the reveal
+    assert [p["t"] for p in polls][0] == 15.0
     text = m.calls[0][1]["content"][-1]["text"]
     assert "The user JUST asked" in text and a.question in text
 
@@ -69,7 +69,7 @@ def test_interleaved_carries_replies_and_caps_images(bench, make_frames):
         m, make_frames(20), b, b.question, ProtocolConfig(max_frames=6, max_new_per_turn=2))
     last = m.calls[-1]
     assert last[0]["role"] == "system" and b.question in last[0]["content"]
-    assert sum(1 for x in last if x["role"] == "assistant") == len(polls)  # incl. the last reply
+    assert sum(1 for x in last if x["role"] == "assistant") == len(polls)
     assert len(collect_images(last)) <= 6
     assert all(p["spoke"] for p in polls)
 
@@ -89,7 +89,6 @@ def test_offline_parses_timed_lines(bench, make_frames):
     polls = get_protocol("offline").run_item(m, make_frames(20), b, b.question, ProtocolConfig())
     assert [(p["t"], p["response"]) for p in polls] == [(3.0, "early guess"), (8.5, "The door opens.")]
     assert len(m.calls) == 1
-    # A-type: the answer is anchored at the question time, whatever time the model reports
     polls = get_protocol("offline").run_item(Recorder("[t=4.0] B"), make_frames(20), a,
                                              a.question, ProtocolConfig())
     assert [(p["t"], p["response"]) for p in polls] == [(15.0, "B")]

@@ -1,48 +1,4 @@
-"""Run ViSpeak-s3 (fushh7/ViSpeak-s3, VITA-1.5 base) over InteractionBench.
-
-ViSpeak is a proactive streaming model: an informative_head scores each video
-segment and the model starts speaking when a 3-segment sliding window of
-sigmoid scores exceeds 0.35. `streaming_generate` returns ONE response and the
-video-time of the triggering segment, so multi-event items are handled by
-re-invoking from the segment after each trigger (responses are not fed back —
-each continuation is independent; recorded in config).
-
-System-fixed sampling: `_get_rawvideo_dec` caps frames at
-MAX_IMAGE_LENGTH * pooling^2 (s3: 16*2*2 = 64) uniformly over the video, so
-input "fps" is duration-dependent and NOT freely settable (recorded in
-config.json of the run).
-
-Item protocol:
-  B/C  question appended to the system prompt (standing request from t=0),
-       inference scans from the first segment
-  A    question in system prompt, but inference may only start at the first
-       segment >= question_time_s (answer-when-asked); scan to q_t + a-window
-
-Upstream:
-  code        https://github.com/HumanMLLM/ViSpeak
-              --vispeak-repo (or the environment variable VISPEAK_REPO), default
-              external/ViSpeak. The runner imports the `vispeak` package from
-              this checkout.
-  checkpoint  fushh7/ViSpeak-s3 (https://huggingface.co/fushh7/ViSpeak-s3)
-              --model (or the environment variable VISPEAK_MODEL). The upstream
-              README requires a local copy whose config.json points to the
-              audio encoder (VITA-MLLM/VITA-1.5) and the visual encoder
-              (OpenGVLab/InternViT-300M-448px); pass that directory.
-
-Environment:
-  A dedicated environment: python 3.10, torch 2.4.0 (cu121), torchaudio 2.4,
-  transformers 4.44.2, xformers 0.0.27.post2, six, decord. decord cannot read
-  AV1 video, so --video-dir defaults to the H.264 proxy directory. See
-  README.md in this directory.
-
-Command used for the paper numbers (1,060-item set, v4 multiple-choice file):
-  python baselines/vispeak/run.py --model /path/to/ViSpeak-s3 --mcq
-
-Output:
-  results/runs/vispeak-s3_streaming_native[_mcq]/preds.jsonl   (or under --out)
-  results/runs/vispeak-s3_streaming_native[_mcq]/raw/<item_id>.json
-  results/runs/vispeak-s3_streaming_native[_mcq]/config.json
-"""
+"""Run ViSpeak-s3 (fushh7/ViSpeak-s3, VITA-1.5 base) over InteractionBench."""
 from __future__ import annotations
 
 import argparse
@@ -192,8 +148,6 @@ def main() -> None:
                 image_aspect_ratio=model.config.image_aspect_ratio)
             n_patch = len(patch_images)
             patch_images = torch.stack(patch_images).half().cuda()
-            # wide/tall videos slice each frame into k patches; the model wants
-            # one IMAGE_TOKEN per PATCH, timestamps repeated per slice
             if n_patch != len(sample_time):
                 if n_patch % len(sample_time) == 0:
                     k = n_patch // len(sample_time)
@@ -222,7 +176,6 @@ def main() -> None:
             agent_ids = torch.full_like(user_ids, tokenizer.pad_token_id)
             stop = KeywordsStoppingCriteria(["<|im_end|>"], tokenizer, user_ids)
 
-            # first segment inference may start from
             start_seg = 0
             if is_A:
                 start_seg = next((k for k, t in enumerate(sample_time)
@@ -237,8 +190,6 @@ def main() -> None:
             while seg <= end_seg and len(emissions) < MAX_TRIGGERS:
                 t0 = time.perf_counter()
                 with torch.inference_mode():
-                    # streaming_generate MUTATES user/agent ids in place
-                    # (image placeholders get overwritten) — always pass clones
                     cont, resp_t = model.streaming_generate(
                         user_ids.clone(), agent_input_ids=agent_ids.clone(),
                         start_inference_seg=(seg, num_token[seg]),
@@ -248,9 +199,6 @@ def main() -> None:
                         audios=audios, pad_token_id=tokenizer.pad_token_id,
                         temperature=0.01, max_new_tokens=256, padding_size=128,
                         stopping_criteria=stop,
-                        # ViSpeak's own bench: proactive head for standing
-                        # tasks, forced answer (proactive=False) for reactive
-                        # QA — mirrors their Visual_Reference protocol
                         proactive=not is_A,
                         sentence_end_token_id=end_id)
                 lat = time.perf_counter() - t0
@@ -264,7 +212,7 @@ def main() -> None:
                 if resp_t is None or not text:
                     break
                 if float(resp_t) > (sample_time[end_seg] + 1e-6):
-                    break  # trigger past the allowed window
+                    break
                 emissions.append({"t": round(float(resp_t), 2),
                                   "content": text, "latency_s": round(lat, 3)})
                 nxt = next((k for k, t in enumerate(sample_time)

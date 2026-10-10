@@ -1,52 +1,5 @@
 #!/usr/bin/env python3
-"""Setting 2: offline temporal grounding evaluation of a visual agent.
-
-What it does
-  The agent receives the path of the FULL video and the question, and lists the
-  moments at which it would have spoken, one line per moment: "[t=12.3] <utterance>".
-  The claimed times become emission times, so `ibench eval` applies the same timing,
-  silence and accuracy scores as for the polling runs. This setting is not real time:
-  the agent sees the whole video, including the part after each answer. Its results
-  are reported separately from the polling results.
-  For items of time type A the agent returns one line with the evidence time and the
-  answer; the emission is placed at question_time_s and the claimed evidence time is
-  kept in the field "claimed_t".
-  An item whose output contains neither a parsable line nor NO_RESPONSE is written to
-  raw/<item>.flake.json and not to preds.jsonl; the next invocation runs it again.
-
-Harnesses (--harness)
-  claude   claude -p PROMPT --mcp-config <agent-home>/.mcp.json
-           --allowedTools <seven Qwen-MM-Plugins tools> --model sonnet
-  gemini   gemini -p PROMPT --yolo   (GEMINI_CLI_TRUST_WORKSPACE=true; MCP server and
-           excluded tools come from <agent-home>/.gemini/settings.json)
-  openai   agents/openai_agent.py PROMPT  (OpenAI-compatible tool-calling loop)
-
-Upstream code
-  Qwen-MM-Plugins, https://github.com/QwenLM/Qwen-MM-Plugins (capability "core",
-  started through `uvx`); the path of the checkout is read from QWEN_MM_PLUGINS_ROOT.
-  The checkout used with this script was version 1.0.8 (commit ab339d2).
-
-Environment
-  Python 3.10 or later with the interactionbench package (repository root), uv (for
-  uvx), ffmpeg (used by the toolbox), and the CLI of the chosen harness or the
-  variables of agents/openai_agent.py. API keys are read from the environment by the
-  CLI tools themselves (ANTHROPIC_API_KEY, GEMINI_API_KEY).
-
-Commands used for the paper (run from the repository root; the command was repeated
-until preds.jsonl held all 1060 items)
-  claude_qwenmm_grounding:
-    python agents/run_grounding.py --harness claude --jobs 4 --timeout 1800
-  openai_qwenmm_grounding:
-    python agents/run_grounding.py --harness openai --jobs 12 --timeout 900
-    (see agents/README.md for the 17 items of this run that came from a later pass)
-
-Output
-  <out>/preds.jsonl            one line per item (evaluator schema), appended
-  <out>/raw/<item>.json        last 600 characters of the agent output, wall time
-  <out>/raw/<item>.flake.json  the same for an item without a usable output
-  <out>/config.json            configuration of the last invocation
-  Default <out>: results/runs/<harness>_qwenmm_grounding
-"""
+"""Setting 2: offline temporal grounding evaluation of a visual agent."""
 import argparse
 import hashlib
 import json
@@ -60,8 +13,6 @@ from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-# Set in main(): HE is the agent home directory (working directory of the agent
-# sessions), VID the directory of the H.264 videos.
 HE = VID = ""
 LETTERS = "ABCDEF"
 CLAUDE_TOOLS = ",".join(
@@ -128,9 +79,6 @@ def build_prompt(it, video):
     if it["mcq"]:
         opts = "\n".join(f"{LETTERS[k]}. {o}"
                          for k, o in enumerate(it["mcq"]["options"]))
-        # The question line is the annotation question. The "stem" field of the
-        # options file is not used in this setting: the paper runs were produced with
-        # the annotation question, and the two texts differ for part of the items.
         stem = q
         q = f"{stem}\n{opts}\n(Respond with just the option letter.)"
         letter_hint = " — just the option letter"
@@ -216,8 +164,6 @@ def main():
     sys.path.insert(0, HERE)
     from common import capability_roundrobin, check_agent_setup
 
-    # Absolute paths: the agent runs in <agent-home> and receives the video path in
-    # the prompt.
     HE = os.path.abspath(args.agent_home)
     VID = os.path.abspath(args.video_dir or f"{args.data}/videos_h264")
     check_agent_setup(args.harness, HE)

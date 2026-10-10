@@ -150,7 +150,7 @@ def test_cache_only_and_ensemble(tmp_path):
         make_judge(f"cache:{tmp_path}/a_v2_shard0.jsonl", strict=True)("q", "gt", "other")
     e = make_judge("ensemble:a,b,c", cache_dir=str(tmp_path))
     assert e("q", "gt", "pred") == 1.0
-    assert make_judge("ensemble:c,a", cache_dir=str(tmp_path))("q", "gt", "pred") == 0.0  # tie
+    assert make_judge("ensemble:c,a", cache_dir=str(tmp_path))("q", "gt", "pred") == 0.0
 
 
 def test_register_judge():

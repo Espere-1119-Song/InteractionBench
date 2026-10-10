@@ -6,9 +6,6 @@ from .base import DEFAULT_PROMPT_VERSION, CachedJudge
 
 
 class HFJudge(CachedJudge):
-    """Loads ``model_id`` with transformers. Works with text LMs and with VLMs used
-    text-only. The paper judge is ``Qwen/Qwen3-14B``."""
-
     def __init__(self, model_id: str = "Qwen/Qwen3-14B", device: str | None = None,
                  cache_path=None, prompt_version: str = DEFAULT_PROMPT_VERSION,
                  max_new_tokens: int = 512, **_ignored):
@@ -24,7 +21,7 @@ class HFJudge(CachedJudge):
                       device_map=device or "auto")
         self.model = None
         last: Exception | None = None
-        for attn in ("sdpa", "eager"):  # some architectures have no sdpa path
+        for attn in ("sdpa", "eager"):
             kwargs["attn_implementation"] = attn
             for cls in (AutoModelForImageTextToText, AutoModelForCausalLM):
                 try:
@@ -40,11 +37,7 @@ class HFJudge(CachedJudge):
 
     def _generate(self, prompt: str) -> str:
         import torch
-        # Plain-string content is valid for multimodal processors and required by
-        # text-only tokenizers (a content list renders incorrectly in their templates).
         messages = [{"role": "user", "content": prompt}]
-        # Hybrid-thinking models must answer directly; templates that do not know the
-        # keyword raise TypeError and get the plain call.
         for tpl_kw in ({"enable_thinking": False, "reasoning_effort": "low"},
                        {"enable_thinking": False}, {}):
             try:
@@ -60,6 +53,6 @@ class HFJudge(CachedJudge):
                                       do_sample=False)
         text = self.processor.batch_decode(
             out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)[0]
-        if "</think>" in text:  # keep the answer after a reasoning block
+        if "</think>" in text:
             text = text.rsplit("</think>", 1)[1]
         return text.strip()

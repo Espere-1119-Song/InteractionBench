@@ -1,39 +1,4 @@
-"""Run VideoChat3-4B (MCG-NJU) natively-streaming over InteractionBench.
-
-VideoChat3 is a proactive streaming VLM: per ~1s round it emits </Silence>,
-</Standby> (event in progress; next frame gets 2x resolution, per the official
-demo), or </Response> <text>. We drive its official StreamingSession:
-  - B/C items: standing question from round 0 (global_question=True)
-  - A items:   question_time = reveal round; earlier rounds ingest frames and
-               auto-emit </Silence> without generation (native late-question)
-
-Greedy decoding (eval determinism). Emissions/latency recorded in the same
-predictions schema as `ibench run`.
-
-Upstream:
-  code        https://github.com/MCG-NJU/VideoChat3
-  checkpoint  MCG-NJU/VideoChat3-4B (https://huggingface.co/MCG-NJU/VideoChat3-4B)
-  The streaming classes (inference_fast_vc3.py, demo_vc3_proactive.py) are
-  imported from the downloaded checkpoint snapshot, so no checkout of the code
-  repository is needed. --model takes a Hugging Face repository id (the runner
-  calls snapshot_download on it).
-
-Environment:
-  torch, transformers, accelerate, qwen-vl-utils, huggingface_hub, and an ffmpeg
-  binary on PATH. The original runner records no version pins. The remote code
-  of the checkpoint imports BASE_VIDEO_PROCESSOR_DOCSTRING from
-  transformers.video_processing_utils, which transformers 5.16.0 does not
-  provide. See README.md in this directory.
-
-Command used for the paper numbers (218-item subset, earlier multiple-choice
-file; see README.md):
-  python baselines/videochat3/run.py \\
-      --items benchmark/splits/frozen218.txt --mcq
-
-Output:
-  results/runs/videochat3-4b_streaming_iv1[_mcq]/preds.jsonl   (or under --out)
-  results/runs/videochat3-4b_streaming_iv1[_mcq]/raw/<item_id>.json
-"""
+"""Run VideoChat3-4B (MCG-NJU) natively-streaming over InteractionBench."""
 
 from __future__ import annotations
 
@@ -69,7 +34,6 @@ def load_vc3(model_id: str):
 
 
 def parse_answer(text: str) -> tuple[bool, str | None, bool]:
-    """-> (spoke, content, standby)"""
     m = TAG_RE.search(text or "")
     tag = m.group(1).lower() if m else None
     if tag == "response":
@@ -145,7 +109,7 @@ def main() -> None:
         args.model, trust_remote_code=True, min_pixels=28 * 28,
         max_pixels=standby_px)
     sys.path.insert(0, str(snap))
-    from demo_vc3_proactive import _resize_frame  # reuse official resizing
+    from demo_vc3_proactive import _resize_frame
 
     import torch
 
@@ -164,7 +128,7 @@ def main() -> None:
             return Engine._strip_end_tokens(text)
 
     engine = _Engine()
-    fpr = max(1, round(args.target_fps))  # frames per 1s round
+    fpr = max(1, round(args.target_fps))
 
     frames_cache: dict[str, list] = {}
     print(f"{len(ready)} items | out: {out_dir}", flush=True)
@@ -185,7 +149,6 @@ def main() -> None:
         end_s = min(it.duration_s, it.question_time_s + args.a_window) \
             if is_A else it.duration_s
         n_rounds = max(1, int(end_s))
-        # A-type: if the question lands at the very end, still give one round
         q_round = min(q_round, n_rounds - 1)
 
         session = StreamingSession(

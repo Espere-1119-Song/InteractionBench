@@ -1,33 +1,4 @@
-"""Loader for the InteractionBench annotations.
-
-Layout on disk (mirrors the dataset repository):
-  <root>/annotations/<domain>/<video_id>.json
-  <root>/videos/<domain>/<video_id>.mp4
-  <root>/mcq/mcq_options_v4.jsonl, <root>/mcq/mcq_key_v4.jsonl
-
-Annotation schema (one file per video):
-  video_id / domain / video / duration_s / items[]
-  item: capability, time_type, interaction_type, range_length, sub_tag,
-        is_negative, auto_number, question, question_time_s,
-        answers[{time_s, content, evidence_time_s?}]
-
-An item is identified by ``<video_id>#<index in items>``.
-
-Taxonomy:
-  time_type A  the question is *revealed* at question_time_s (usually near the
-               end of the video); one answer, due immediately. Retrospective
-               memory QA (LVM, IVQA).
-  time_type B  standing question from t=0; the answer becomes determinable at
-               answers[i].time_s. Proactive trigger (PTR, TOA, CIR).
-  time_type C  standing question from t=0; many timed answers over the stream.
-               Continuous output (CST counting, LCG narration, repeated PTR).
-
-  is_negative, or content SHOULD_REMAIN_SILENT: the system must never speak.
-  auto_number, or sub_tag "counting": answers[i].content is a running count.
-
-The loader also reads the layout of earlier internal copies,
-``<root>/results/<domain>/<video_id>/annotation.json``.
-"""
+"""Loader for the InteractionBench annotations."""
 
 from __future__ import annotations
 
@@ -36,7 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 SILENT_TOKEN = "SHOULD_REMAIN_SILENT"
-# sub_tag values that mark a counting item ("计数型" is the value in earlier copies)
 COUNTING_SUB_TAGS = ("counting", "计数型")
 
 CAPABILITIES = ("LVM", "IVQA", "PTR", "TOA", "CIR", "CST", "LCG", "BRC")
@@ -58,9 +28,9 @@ class BenchItem:
     video_id: str
     item_index: int
     capability: str
-    time_type: str | None          # A / B / C
-    interaction_type: str | None   # QA / INS
-    sub_tag: str | None            # counting / goal / narration / None
+    time_type: str | None
+    interaction_type: str | None
+    sub_tag: str | None
     is_negative: bool
     auto_number: bool
     question: str
@@ -91,7 +61,6 @@ class BenchItem:
 
     @property
     def valid(self) -> bool:
-        """Scoreable: has a time_type and either GT answers or a silent target."""
         if self.time_type not in ("A", "B", "C"):
             return False
         return self.should_remain_silent or len(self.timed_answers) > 0
@@ -151,11 +120,6 @@ def load_video(annotation_path: Path) -> BenchVideo:
 
 
 def load_benchmark(root: str | Path) -> list[BenchVideo]:
-    """Load every annotation under ``root``, ordered by domain and video id.
-
-    ``root`` is the dataset root, its ``annotations/`` directory, or one domain
-    directory. The layout of earlier copies (``results/.../annotation.json``) is read
-    as well."""
     root = Path(root)
     if (root / "annotations").is_dir():
         root = root / "annotations"
@@ -164,7 +128,6 @@ def load_benchmark(root: str | Path) -> list[BenchVideo]:
     legacy = sorted(root.rglob("annotation.json"))
     if legacy:
         return [load_video(p) for p in legacy]
-    # order by directory parts and file stem, the same order as the earlier layout
     paths = sorted(root.rglob("*.json"), key=lambda p: (*p.parent.parts, p.stem))
     return [load_video(p) for p in paths]
 

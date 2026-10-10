@@ -1,43 +1,5 @@
 #!/usr/bin/env python3
-"""OpenAI-compatible tool-calling agent, used as the "openai" harness.
-
-What it does
-  Command line replacement for `claude -p`: the prompt is argv[1] and the final answer
-  is printed on stdout. The script runs a function-calling loop against an
-  OpenAI-compatible chat-completions endpoint. The functions are the tools of the
-  Qwen-MM-Plugins "core" MCP server (frame extraction with ffmpeg, no GPU), which the
-  script starts through `uvx` and calls over stdio. Images returned by a tool are sent
-  to the model in a following user message.
-  Tools offered to the model: the server tools whose name is in ALLOWED. A name in
-  ALLOWED that the server does not provide is ignored.
-  The loop ends when the model replies without a tool call, or after OAI_MAX_TURNS
-  model calls (then an empty line is printed). Each model call has
-  max_completion_tokens = 1500. HTTP errors 429, 500, 502 and 503 are retried up to 5
-  times with waits of 8, 16, 32, 64 and 128 seconds.
-
-Upstream code
-  Qwen-MM-Plugins, https://github.com/QwenLM/Qwen-MM-Plugins (capability "core").
-
-Environment
-  Python 3.10 or later (standard library only), uv (for uvx), ffmpeg.
-  OAI_MODEL             model name on the endpoint (required)
-  OAI_BASE_URL          default http://127.0.0.1:8199/v1 (agents/cost_proxy.py)
-  OAI_API_KEY           default "proxy" (the real key is held by the cost proxy; set
-                        this variable only when calling an endpoint directly)
-  OAI_MAX_TURNS         default 12
-  QWEN_MM_PLUGINS_ROOT  path of the Qwen-MM-Plugins checkout (required)
-
-Command
-  The runners call this script; it is not started by hand for the paper runs:
-    python agents/run_polling.py --harness openai ...
-  Stand-alone use:
-    python agents/openai_agent.py "<prompt>"
-
-Output
-  The final answer on stdout.
-  Exit codes: 0 success; 1 API error; 3 spending limit reached at the cost proxy
-  (stdout is empty, so the runner records no answer for the item).
-"""
+"""OpenAI-compatible tool-calling agent, used as the "openai" harness."""
 import json
 import os
 import subprocess
@@ -50,8 +12,6 @@ ALLOWED = ("read_video", "read_image", "media_info", "crop_image", "save_view")
 
 
 class MCP:
-    """Minimal stdio JSON-RPC client for the qwen-mm MCP server."""
-
     def __init__(self, root):
         self.p = subprocess.Popen(
             ["uvx", "--from", f"{root}[core]", "qwen-mm-plugins-core"],
@@ -165,7 +125,7 @@ def main():
                              [{"type": "text", "text":
                                "Frames returned by the tool call(s) above:"}]
                              + frames})
-        print("")  # turn cap: no final answer
+        print("")
     finally:
         mcp.close()
 

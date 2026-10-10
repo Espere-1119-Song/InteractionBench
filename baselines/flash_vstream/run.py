@@ -1,37 +1,4 @@
-"""Flash-VStream-Qwen-7b on InteractionBench via the POLLING protocol.
-
-Flash-VStream is reactive (it has no speak/silence head), so it runs the standard
-polling protocol: its flash memory ingests the stream incrementally (8 fps), and
-every --interval seconds the model is asked the SPEAK-or-WAIT question; silence is
-the instructed default.
-
-Ingest is O(1) per tick (fixed-size flash memory); the query reads the memory.
-
-Upstream: https://github.com/IVGSZ/Flash-VStream (this script imports the ``models``
-package of its ``Flash-VStream-Qwen`` sub-directory; pass that directory with --repo
-or the environment variable FVSTREAM_REPO).
-Checkpoint: zhang9302002/Flash-VStream-Qwen-7b (Hugging Face). By default the newest
-snapshot in the Hugging Face cache is used; --checkpoint takes a local directory.
-
-Environment (versions of the paper run): Python 3.10, torch 2.7.1 (CUDA 12.8),
-torchvision 0.22.1, transformers 4.45.0, flash-attn 2.8.3, decord 0.6.0,
-accelerate 1.14.0, peft 0.20.0; see README.md. flash-attn is required.
-
-Command used for the paper numbers (run directory fvstream-7b_polling_iv1_8fps_mcq,
-then ``baselines/flash_vstream/reparse.py`` for
-fvstream-7b_polling_iv1_8fps_mcq_lenientparse; the run was split into shards with
---items and merged with ``ibench merge``):
-  python baselines/flash_vstream/run.py --mcq --fps 8 --interval 1.0
-
-Exit code 17 means a GPU out-of-memory error: start the same command again (a new
-process gets a clean CUDA context). An item that ran out of memory in two processes
-is recorded as failed (empty emissions) on the next start.
-
-Output: <out>/preds.jsonl (one line per item, appended, resumable),
-<out>/raw/<video_id>#<item_index>.json (the first 120 characters of every reply),
-<out>/config.json, <out>/oom_restarts.json and <out>/current_item.txt (the item in
-progress). Default <out>: results/runs/fvstream-7b_polling_iv<interval>_<fps>fps[_mcq].
-"""
+"""Flash-VStream-Qwen-7b on InteractionBench via the POLLING protocol."""
 from __future__ import annotations
 
 import argparse
@@ -185,9 +152,6 @@ def main() -> None:
         return start_idx + len(clip_frames)
 
     def memory_tokens():
-        # exact formula from the model's own position-id assert:
-        # spa_size + tem_size where size = thw.prod()//4
-        # (memory slots: 1 = tem_thw, 5 = spa_thw)
         mem = model.video_embedding_memory
         if not mem:
             return 0
@@ -214,7 +178,7 @@ def main() -> None:
         text = processor.batch_decode(out[:, inputs.input_ids.shape[1]:],
                                       skip_special_tokens=True)[0]
         del inputs, out
-        torch.cuda.empty_cache()  # per-tick allocations fragment the memory of a 46 GB GPU
+        torch.cuda.empty_cache()
         return text
 
     print(f"{len(ready)} items | out: {out_dir}", flush=True)
@@ -222,8 +186,6 @@ def main() -> None:
     oom_counts = json.loads(oom_fp.read_text()) if oom_fp.exists() else {}
     marker = out_dir / "current_item.txt"
     if marker.exists():
-        # the previous process died in the middle of an item (GPU stall inside a
-        # call, killed by an external watchdog, etc.)
         dead = marker.read_text().strip()
         if dead:
             oom_counts[dead] = oom_counts.get(dead, 0) + 1
@@ -235,10 +197,6 @@ def main() -> None:
             continue
         n_oom = oom_counts.get(it.item_id, 0)
         if n_oom >= 2:
-            # Out of memory from a clean context in >=2 processes: the item exceeds
-            # a full 180 GB GPU for this system. Record it as a failed item (empty
-            # emissions, error noted) so that the run can terminate; it is scored as
-            # silence/miss.
             pred = {"video_id": it.video_id, "item_index": it.item_index,
                     "model": "fvstream-7b", "run": run_tag, "emissions": [],
                     "n_polls": 0, "poll_latencies": [],
@@ -259,7 +217,6 @@ def main() -> None:
             vfps = vr.get_avg_fps()
             dur = len(vr) / vfps
             end_s = min(dur, q_t + args.a_window) if is_A else dur
-            # fresh memory per item
             model.use_video_streaming_mode = True
             model.video_embedding_memory = []
             frame_cnt = 0
@@ -267,29 +224,21 @@ def main() -> None:
             t_item0 = time.time()
             while t < end_s - 1e-6:
                 if time.time() - t_item0 > 5400:
-                    # GPU memory nearly full: allocations barely succeed, GPU
-                    # utilisation is about 8%, and the log keeps printing, so a
-                    # watchdog that looks at the log does not see the stall
                     raise RuntimeError("out of memory (item wall-clock cap 90min — VRAM thrash)")
                 t_next = min(t + args.interval, end_s)
                 idxs = [min(int(x * vfps), len(vr) - 1)
                         for x in np.arange(t, t_next, 1.0 / args.fps)]
-                if len(idxs) % 2:  # odd frame count breaks temporal patching
-                    idxs.append(idxs[-1])  # (memory grid then desyncs -> reshape errors downstream)
+                if len(idxs) % 2:
+                    idxs.append(idxs[-1])
                 if idxs:
                     clip = [Image.fromarray(vr[k].asnumpy()) for k in idxs]
                     frame_cnt = ingest(clip, frame_cnt)
                 t = t_next
                 if is_A and t < q_t - 1e-6:
-                    # B/C items stay memory-bounded because per-tick queries drive
-                    # the flash-memory consolidation; pure pre-reveal ingest grows
-                    # to ~177G and thrashes. Run a neutral consolidation query
-                    # every 30s of stream time: the question text never appears
-                    # before the reveal, output discarded, not recorded as a poll.
                     if int(t) % 30 == 0:
                         with contextlib.suppress(Exception):
                             ask("Keep watching. Reply WAIT.", t)
-                    continue  # A: no polling before the reveal
+                    continue
                 t0 = time.perf_counter()
                 raw = ask(question, t)
                 lat = time.perf_counter() - t0
@@ -312,10 +261,6 @@ def main() -> None:
             model.video_embedding_memory = []
             torch.cuda.empty_cache()
             if "out of memory" in msg:
-                # Out of memory leaves ~100G of unreclaimable resident tensors
-                # (the same failure then repeats on every later item), so exit and
-                # let the caller restart with a clean CUDA context. The side file
-                # caps the retries per item so that oversized items cannot loop.
                 fp = out_dir / "oom_restarts.json"
                 d = json.loads(fp.read_text()) if fp.exists() else {}
                 d[it.item_id] = d.get(it.item_id, 0) + 1

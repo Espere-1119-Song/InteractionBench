@@ -1,74 +1,5 @@
 #!/usr/bin/env python3
-"""Oracle diagnostics: restraint, timing and perception.
-
-Every oracle uses the reference annotations of the benchmark. The results are upper
-bounds for diagnosis, not scores of a system that could be deployed.
-
-  restraint    Post-processing of stored predictions, no model. Emissions that count
-               as timing violations are deleted; no reply is rewritten. On an item
-               that requires silence every emission is deleted. On any other item
-               only the first matched response of each reference window is kept
-               (reference times: the question time for time type A, the merged
-               answer times otherwise; matching as in the scorer, pre-anchor
-               tolerance 1.0 s). Text and timestamps of the kept emissions are
-               unchanged. The scorer pools all text inside a free-form segment, so
-               the deletion can lower content accuracy of free-form items.
-  timing       The model is queried only at the reference response times (question
-               time for time type A, the distinct answer times otherwise, never on
-               an item that requires silence) and is told to answer at each of them.
-               No reference answer text is sent to the model.
-  perception   At every polling step the images are removed and replaced by the
-               reference facts of the item that are already available: a fact is
-               released at its annotated evidence time, or at its answer time when
-               no evidence time exists. The model still decides when to speak. This
-               is a content oracle derived from the annotations, not a transcript of
-               the whole video.
-
-The timing and the perception oracle need a model on a GPU. They are implemented as
-protocols and registered when this file is loaded as a plugin:
-
-  python -m interactionbench run --plugin analysis/oracles.py \
-      --protocol oracle-timing --model qwen3vl-8b --interval 1 --max-frames 16 \
-      --sample-fps 2 --mcq --items benchmark/splits/subset103.txt \
-      --out results/runs/qwen3vl-8b_oracle_timing
-  python -m interactionbench run --plugin analysis/oracles.py \
-      --protocol oracle-perception --model qwen3vl-8b --interval 1 --max-frames 16 \
-      --sample-fps 2 --mcq --items benchmark/splits/subset103.txt \
-      --out results/runs/qwen3vl-8b_oracle_perception
-
-Both use the sliding context regime; ``--protocol-arg mode=cumulative`` or
-``mode=interleaved`` selects another regime.
-
-Sub-commands (no model):
-
-  restraint   write <target_root>/<run><target_suffix>/{preds.jsonl,config.json}
-  manifest    write oracle_manifest.json into the run directory of a timing or
-              perception run
-  score       score a finished run on an item subset with the paper protocol
-              (pre-anchor tolerance 1.0 s, Delta 5.0 s, stored judge verdicts); a run
-              that does not cover every item of the subset is refused
-  collect     status of a list of runs: recorded items, failed items, summary
-
-Upstream checkpoint of the GPU part: https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct
-(model name ``qwen3vl-8b``). Judge of ``score``: stored verdicts of
-https://huggingface.co/Qwen/Qwen3-14B, or the model itself with ``--gpu-judge``.
-Environment: Python >= 3.10 and the ``interactionbench`` package; torch and
-transformers for the GPU part.
-
-Commands used for the paper numbers:
-
-  python analysis/oracles.py restraint --preset subset103
-  python analysis/oracles.py restraint --preset all --target-suffix _oracle_restraint_all
-  python analysis/oracles.py manifest --oracle timing --run qwen3vl-8b_oracle_timing
-  python analysis/oracles.py score qwen3vl-8b_oracle_timing --gpu-judge
-  python analysis/oracles.py collect
-
-Outputs:
-  <target_root>/<run><target_suffix>/preds.jsonl, config.json      (restraint)
-  <runs_root>/<run>/oracle_manifest.json                           (manifest)
-  <runs_root>/<run>/<eval_name>/{summary.json,records.jsonl}       (score)
-  <out>/status.json                                                (collect)
-"""
+"""Oracle diagnostics: restraint, timing and perception."""
 
 from __future__ import annotations
 
@@ -85,10 +16,8 @@ from interactionbench.protocols import (Protocol, make_poll, poll_ticks, registe
                                         trim_context_images, user_turn)
 
 RESTRAINT_PRESETS = {
-    # the two traces compared with the agents, on the 103-item subset
     "subset103": {"runs": ["qwen3vl-8b_sliding_iv1_mcqv4_full", "joyai_streaming_4fps_mcqv4"],
                   "items": "benchmark/splits/subset103.txt"},
-    # the four traces of the thinning curves, on all items
     "all": {"runs": ["qwen3vl-8b_sliding_win64_iv1_mcqv4_full", "llava-ov2-8b_sliding_iv1_mcqv4_full",
                      "joyai_streaming_4fps_mcqv4", "mmduet2-3b_streaming_4fps_mcq_MERGED"],
             "items": None},
@@ -117,12 +46,7 @@ No reference answer text is sent to the timing model.
 """
 
 
-# ------------------------------------------------------------------ GPU oracles (protocols)
-
 class _OracleProtocol(Protocol):
-    """Fixed-interval polling loop with two hooks: the tick schedule and an edit of
-    the messages of each step before generation."""
-
     def ticks(self, item, cfg, is_reveal):
         return poll_ticks(item, cfg.interval, cfg.a_window)
 
@@ -160,7 +84,7 @@ class _OracleProtocol(Protocol):
                 messages = [{"role": "system", "content": SYSTEM},
                             user_turn(window, template.format(
                                 t=t, question=question, hint=hint, fmt=FORMAT))]
-            else:  # interleaved
+            else:
                 new = [f for f in history if prev_t < f.time <= t] or history[-1:]
                 new = subsample(new, cfg.max_new_per_turn)
                 convo.append(user_turn(new, INTERLEAVED_TURN.format(t=t)))
@@ -185,7 +109,6 @@ class OracleTimingProtocol(_OracleProtocol):
     name = "oracle-timing"
 
     def ticks(self, item, cfg, is_reveal):
-        # Keep visual content generation; supply only an ideal trigger schedule.
         return ([] if item.should_remain_silent else
                 [item.question_time_s] if is_reveal else
                 sorted({a.time_s for a in item.timed_answers}))
@@ -204,7 +127,6 @@ class OraclePerceptionProtocol(_OracleProtocol):
         facts = []
         for answer in item.timed_answers:
             release = answer.evidence_time_s if answer.evidence_time_s is not None else answer.time_s
-            # Never reveal the reference before its annotated evidence exists.
             if release <= t:
                 facts.append(f"[observed at {release:.3f}s] {answer.content}")
         observed = "\n".join(facts) or "No reference fact has become available yet."
@@ -219,8 +141,6 @@ class OraclePerceptionProtocol(_OracleProtocol):
 register_protocol(OracleTimingProtocol.name, OracleTimingProtocol, overwrite=True)
 register_protocol(OraclePerceptionProtocol.name, OraclePerceptionProtocol, overwrite=True)
 
-
-# ------------------------------------------------------------------ restraint
 
 def cmd_restraint(args) -> None:
     from interactionbench.data import iter_items, load_benchmark
@@ -253,7 +173,6 @@ def cmd_restraint(args) -> None:
                 times = ([item.question_time_s] if item.time_type == 'A' else
                          [t for t, _ in merge_coincident(item.timed_answers)])
                 new = list(decision_timing(times, old, MetricConfig())['matched_events'].values())
-                # Validate the claimed intervention using the scorer itself.
                 assert decision_timing(times, new, MetricConfig())['n_violations'] == 0
             assert all(e in old for e in new)
             removed += len(old) - len(new)
@@ -270,8 +189,6 @@ def cmd_restraint(args) -> None:
         print(target.name, len(output), 'deleted', removed, flush=True)
 
 
-# ------------------------------------------------------------------ manifest
-
 def cmd_manifest(args) -> None:
     out = Path(args.runs_root) / args.run
     out.mkdir(parents=True, exist_ok=True)
@@ -284,8 +201,6 @@ def cmd_manifest(args) -> None:
         'interpretation': ORACLE_DOC}, indent=2))
     print("wrote", out / 'oracle_manifest.json')
 
-
-# ------------------------------------------------------------------ score
 
 def cmd_score(args) -> None:
     r = Path(args.runs_root) / args.run
@@ -309,8 +224,6 @@ def cmd_score(args) -> None:
     print(args.run, s['overall'], 'status', s['experiment_status'], flush=True)
 
 
-# ------------------------------------------------------------------ collect
-
 def cmd_collect(args) -> None:
     from datetime import datetime, timezone
 
@@ -333,8 +246,6 @@ def cmd_collect(args) -> None:
     print(json.dumps({k: {'recorded': v['recorded_items'], 'failed': v['failed_items'], 'final': v['final']} for k, v in report['runs'].items()}, indent=2))
     print("wrote", out)
 
-
-# ------------------------------------------------------------------ cli
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,

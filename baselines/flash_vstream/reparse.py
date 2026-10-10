@@ -1,40 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild the Flash-VStream emissions from the raw poll dumps with a lenient parser.
-
-The strict regular expression of ``baselines/flash_vstream/run.py``
-(DECISION: SPEAK / RESPONSE: ...) matched none of the replies of the model. A census
-over the raw dumps of the paper run shows three variants instead: 'SPEAk\n<content>'
-(27167 polls), a bare option letter 'C.' (25764), bare 'WAIT' (2678). This script
-derives the emission stream of each item again from raw/*.json without touching the
-original predictions, and writes a parallel run directory with the suffix
-_lenientparse for side-by-side scoring.
-
-Lenient rule per poll (first match wins):
-  1. strict template  DECISION: SPEAK|WAIT (+ RESPONSE: ...)
-  2. reply starts with the WAIT token  -> silence
-  3. reply starts with the SPEAK token -> emission = text after that token/line
-  4. bare option letter [A-E][.)]? -> emission = the letter
-  5. empty -> silence
-  6. anything else -> emission = first line verbatim (the model spoke content
-     without any protocol token; counting it as silence is what set the
-     original scores to zero)
-
-A prediction line that carries an "error" field, or that has no raw dump, is copied
-unchanged.
-
-Upstream system: https://github.com/IVGSZ/Flash-VStream, checkpoint
-zhang9302002/Flash-VStream-Qwen-7b (needed by run.py only).
-Environment: Python >= 3.8, standard library only.
-
-Command used for the paper numbers (run directory
-fvstream-7b_polling_iv1_8fps_mcq_lenientparse):
-  python baselines/flash_vstream/reparse.py \
-      --src results/runs/fvstream-7b_polling_iv1_8fps_mcq
-
-Input: <src>/preds.jsonl and the raw dumps <src>_*shard*/raw/*.json and
-<src>/raw/*.json (a dump under <src>/raw takes precedence).
-Output: <dst>/preds.jsonl, default <dst> = <src>_lenientparse.
-"""
+"""Rebuild the Flash-VStream emissions from the raw poll dumps with a lenient parser."""
 import argparse
 import glob
 import json
@@ -51,7 +16,6 @@ SRC = "results/runs/fvstream-7b_polling_iv1_8fps_mcq"
 
 
 def parse(raw):
-    """-> (spoke, content)"""
     raw = (raw or "").strip()
     m = DEC.search(raw)
     if m:

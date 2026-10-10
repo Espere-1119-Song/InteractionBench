@@ -1,44 +1,4 @@
-"""Run Dispider (CVPR25) over InteractionBench, offline-grounding track.
-
-IMPORTANT — protocol caveat. Dispider's paper is about *active real-time
-interaction* (a decision module choosing when to respond), but its released
-inference API exposes only whole-video single-shot QA: `videoStream.Run(video,
-prompt)` returns one string, and the decision machinery (`ans_position`,
-`silent_position`) are *inputs* to generate(), never outputs. There is no
-public way to read back "when did it decide to speak". We therefore evaluate
-Dispider on the SAME offline temporal-grounding track as the Qwen3-VL offline
-runs: it is asked, in the phrasing it was trained on, at what second(s) it
-would respond, and its claimed timestamps become emission times. Its scores
-are thus comparable to the other offline systems, NOT to the streaming ones,
-and they do not measure the proactive decision loop described in the paper.
-
-Answers arrive as spelled-out numbers ("at seventy-seven seconds"), so both
-digit and word forms are parsed.
-
-Upstream:
-  code        https://github.com/Mark12Ding/Dispider
-              --dispider-repo (or the environment variable DISPIDER_REPO),
-              default external/Dispider. The runner imports inference.py from
-              this checkout.
-  checkpoint  Mar2Ding/Dispider (https://huggingface.co/Mar2Ding/Dispider)
-              --model (or the environment variable DISPIDER_MODEL) takes a
-              repository id or a local directory. The paper run used a local
-              copy whose config.json pointed to a local compressor directory.
-
-Environment:
-  A dedicated environment: python 3.10, torch 2.2 (cu118), flash-attn 2.5.9,
-  numpy<2, decord. decord cannot read AV1 video, so --video-dir defaults to the
-  H.264 proxy directory. See README.md in this directory.
-
-Command used for the paper numbers (218-item subset, earlier multiple-choice
-file; see README.md):
-  python baselines/dispider/run.py \\
-      --items benchmark/splits/frozen218.txt --mcq
-
-Output:
-  results/runs/dispider_offline[_mcq]/preds.jsonl   (or under --out)
-  results/runs/dispider_offline[_mcq]/raw/<item_id>.json
-"""
+"""Run Dispider (CVPR25) over InteractionBench, offline-grounding track."""
 
 from __future__ import annotations
 
@@ -68,7 +28,6 @@ _TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
 
 
 def words_to_number(text: str) -> list[float]:
-    """Spelled-out seconds -> numbers ('eighty - ninety-three' -> [80, 93])."""
     toks = re.split(r"[\s\-]+", text.lower())
     out, cur, pending, has_tens, has_unit = [], 0, False, False, False
 
@@ -81,20 +40,20 @@ def words_to_number(text: str) -> list[float]:
     for t in toks:
         t = t.strip(".,;:")
         if t in _TENS:
-            if has_tens or has_unit:   # 'eighty ninety-three' = two numbers
+            if has_tens or has_unit:
                 flush()
             cur += _TENS[t]
             pending = has_tens = True
         elif t in _UNITS:
-            if has_unit:               # 'seven eight' = two numbers
+            if has_unit:
                 flush()
             cur += _UNITS[t]
             pending = has_unit = True
         elif t == "hundred" and pending:
-            cur *= 100                 # 'one hundred twenty' keeps accumulating
+            cur *= 100
             has_tens = has_unit = False
         elif t == "and" and pending:
-            continue                   # 'one hundred and five' is one number
+            continue
         else:
             flush()
     flush()
@@ -107,16 +66,10 @@ _RANGE_SEP = re.compile(r"(?:\bto\b|[-–—])")
 def parse_times(text: str) -> list[float]:
     digits = [float(x) for x in re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:s\b|sec|second)", text.lower())]
     bare = [float(x) for x in re.findall(r"\b(\d+(?:\.\d+)?)\b", text)]
-    # "from 10 to 20 seconds": only the second number carries the unit, so the
-    # unit-anchored pass would miss the range start
     if digits and not (len(bare) > len(digits) and _RANGE_SEP.search(text)):
         times = digits
     else:
         times = bare if bare else words_to_number(text)
-    # Dispider answers with intervals ("fifty-seven - sixty seconds"). An
-    # interval is ONE event, and the moment it claims to respond is its start —
-    # keeping both ends would double-count responses and unfairly cost Silence
-    # Compliance. Collapse pairs whenever the text uses a range separator.
     if len(times) >= 2 and len(times) % 2 == 0 and _RANGE_SEP.search(text):
         collapsed = times[::2]
         if all(a <= b for a, b in zip(times[::2], times[1::2])):
@@ -208,12 +161,6 @@ def main() -> None:
                 out = ""
             return (out or "").strip(), time.perf_counter() - t0
 
-        # Dispider's grounding answer states only WHEN ("the event happens in
-        # 57-60 seconds"), never WHAT — scoring that text as the response would
-        # zero its Accuracy for protocol reasons rather than capability ones.
-        # So B/C items get two calls: the question itself for content, the
-        # grounding phrasing for timing. A-type needs only the question (it is
-        # answered at question_time by definition).
         answer, lat_a = ask(question)
         if is_A:
             text, lat = answer, lat_a

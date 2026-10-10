@@ -1,10 +1,4 @@
-"""Offline temporal grounding: the non-real-time reference track.
-
-The system sees the whole video in one call and lists every moment where it would have
-responded. The claimed timestamps become emission times, so the same timing and silence
-scores apply. The system has hindsight here, so these numbers are an upper reference
-for the same model under polling and are not real-time results.
-"""
+"""Offline temporal grounding: the non-real-time reference track."""
 
 from __future__ import annotations
 

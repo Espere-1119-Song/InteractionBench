@@ -1,42 +1,5 @@
 #!/usr/bin/env python3
-"""Delta / gate sensitivity grid and emission-thinning TA-SC curves.
-
-Sensitivity grid. Every run is scored without a judge under eight settings and the
-overall total is stored:
-
-  delta2, delta3, delta8, delta10   acceptable-delay bound Delta of 2, 3, 8, 10 s
-  gate0.2, gate0.4, gate0.5         content-gate threshold 0.2, 0.4, 0.5
-  base                              the evaluator defaults (Delta 5 s)
-
-The gate settings change the threshold only. The content gate itself is disabled in
-the paper protocol (MetricConfig.use_gate = False), so these three settings return the
-same total as ``base`` unless the gate is enabled in the package.
-
-Thinning curves. For every curve run and every keep rate in (1.0, 0.8, 0.6, 0.4, 0.2,
-0.1) each emission is kept independently with that probability (random.Random(11),
-restarted for every run and keep rate, emissions visited in file order). The thinned
-predictions are scored and timing accuracy, silence compliance and total are stored.
-
-Presets:
-  paper16   the 16 runs of the paper grid; curves for four of them, keyed by a
-            display label
-  all       22 runs; curves for all of them, keyed by run name
-
-Upstream repository or checkpoint: none. Environment: Python >= 3.10 and the
-``interactionbench`` package; no GPU.
-
-Commands used for the paper numbers (pre-anchor tolerance 1 s):
-
-  python analysis/sensitivity_and_thinning.py --preset paper16 --pre-tol 1.0 \
-      --suffix _pretol1 --jobs 8
-  python analysis/sensitivity_and_thinning.py --preset all --pre-tol 1.0 \
-      --suffix _pretol1_all --jobs 8
-
-Outputs:
-  <out>/sensitivity<suffix>.json        {run: {setting: total}}
-  <out>/thinning_curves<suffix>.json    {label: [{"keep", "TA", "SC", "total"}, ...]}
-  <work_dir>/thin_<run>_<percent>.jsonl thinned predictions (intermediate files)
-"""
+"""Delta / gate sensitivity grid and emission-thinning TA-SC curves."""
 
 from __future__ import annotations
 
@@ -77,7 +40,7 @@ PRESETS = {
                  "qwen3vl-8b_blind_iv1_mcqv4_full", "qwen3vl-8b_sliding_win64_iv1_mcqv4_full",
                  "qwen3vl-8b_interleaved_iv1_mcqv4_full", "qwen3vl-4b_interleaved_iv1_mcqv4_full",
                  "llava-ov2-8b_interleaved_iv1_mcqv4_full", "qwen3-8b-text_blind_iv1_mcqv4_full"],
-        "curves": None,  # every run, keyed by run name
+        "curves": None,
     },
 }
 CFGS = [("delta", d) for d in (2, 3, 8, 10)] + [("gate", g) for g in (0.2, 0.4, 0.5)] + [("base", None)]
@@ -166,7 +129,6 @@ def main() -> None:
     json.dump(sens, open(f"{args.out}/sensitivity{args.suffix}.json", "w"), indent=1)
     print("sensitivity done")
 
-    # thinning curves
     jobs = []
     for label, run in curves:
         if not os.path.exists(f"{args.runs_root}/{run}/preds.jsonl"):

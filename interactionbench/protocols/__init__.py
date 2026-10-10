@@ -1,11 +1,4 @@
-"""Test methods.
-
-Built in:
-  sliding, cumulative, interleaved   fixed-interval polling, three context regimes
-  offline                            whole-video temporal grounding (not real-time)
-
-``--blind`` combines with any of them and removes all frames.
-"""
+"""Test methods."""
 
 from __future__ import annotations
 
@@ -21,7 +14,6 @@ for _cls in (SlidingProtocol, CumulativeProtocol, InterleavedProtocol, OfflinePr
 
 
 def register_protocol(name: str, cls: type | None = None, *, overwrite: bool = False):
-    """Register a :class:`Protocol` subclass. Usable as a decorator."""
     return PROTOCOLS.register(name, cls, overwrite=overwrite)
 
 
@@ -30,7 +22,6 @@ def list_protocols() -> list[str]:
 
 
 def get_protocol(name: str) -> Protocol:
-    """Instantiate a protocol by registered name or by ``module:Class`` path."""
     if name in PROTOCOLS:
         return PROTOCOLS.get(name)()
     if ":" in name:

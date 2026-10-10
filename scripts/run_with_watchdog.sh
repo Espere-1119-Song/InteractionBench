@@ -1,11 +1,6 @@
 #!/bin/bash
-# run_with_watchdog.sh <stall_seconds> <log_file> -- <command...>
-#
-# Runs <command> with its output appended to <log_file>. Restarts it when it exits with
-# an error, and kills and restarts it when <log_file> has not been written for
-# <stall_seconds>. `ibench run` resumes from the items already in preds.jsonl, so a
-# restart loses at most the item in progress. Choose <stall_seconds> longer than the
-# longest single item. Exits 0 when <command> exits 0; gives up after 30 attempts.
+# Usage: run_with_watchdog.sh <stall_seconds> <log_file> -- <command...>
+# Restarts <command> when it fails or <log_file> stalls; ibench run resumes finished items.
 STALL=$1; LOG=$2; shift 3
 WATCH="${WATCH_FILE:-$LOG}"
 mkdir -p "$(dirname "$LOG")"

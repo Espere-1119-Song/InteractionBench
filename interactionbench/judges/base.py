@@ -1,13 +1,4 @@
-"""Judge interface and the shared grading prompt.
-
-A judge is a callable ``(question, gt_answer, pred_answer) -> float in [0, 1]`` passed
-to the metrics through ``judge=``. Multiple-choice items never reach the judge; they
-are scored by option match.
-
-To add a judge backend, subclass :class:`CachedJudge` and implement ``_generate``
-(prompt in, raw text out). Caching, prompt construction and verdict parsing are
-inherited.
-"""
+"""Judge interface and the shared grading prompt."""
 
 from __future__ import annotations
 
@@ -17,7 +8,6 @@ import re
 from pathlib import Path
 
 PROMPTS = {
-    # v1: strict equivalence. Extra detail in the answer counts against it.
     "v1": """You are grading answers from a real-time video assistant.
 
 Question asked about the video:
@@ -37,7 +27,6 @@ This is a strict binary judgment: an incomplete or partially correct answer
 counts as NO.
 
 Reply with exactly one line: SCORE: 1 (correct) or SCORE: 0 (incorrect)""",
-    # v2: containment. The paper protocol.
     "v2": """You are grading answers from a real-time video assistant.
 
 Question asked about the video:
@@ -65,14 +54,13 @@ _SCORE_RE = re.compile(r"(?:score\s*:\s*)?(\d+(?:\.\d+)?)", re.IGNORECASE)
 
 
 def parse_score(text: str) -> float:
-    """Binary verdict: any scale the judge answers on collapses to 0 / 1."""
     m = _SCORE_RE.search(text or "")
     if not m:
         return 0.0
     v = float(m.group(1))
-    if v > 10:    # answered 0-100
+    if v > 10:
         v /= 100.0
-    elif v > 1:   # answered 0-10
+    elif v > 1:
         v /= 10.0
     return 1.0 if v >= 0.5 else 0.0
 
@@ -94,7 +82,6 @@ def read_cache(path: str | Path) -> dict[str, float]:
 
 
 def trivial_verdict(gt: str, pred: str) -> float | None:
-    """Verdicts that need no judge call; None when the judge must decide."""
     if not gt and not pred:
         return 1.0
     if not gt or not pred:
@@ -103,12 +90,6 @@ def trivial_verdict(gt: str, pred: str) -> float | None:
 
 
 class CachedJudge:
-    """Disk-cached judge. Subclasses implement ``_generate(prompt) -> str``.
-
-    The cache is keyed by (question, ground truth, prediction). Verdicts depend on the
-    judge model and on the prompt version, so keep one cache file per combination.
-    """
-
     name = "judge"
 
     def __init__(self, cache_path: str | Path | None = None,

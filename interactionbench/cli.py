@@ -1,12 +1,4 @@
-"""Command line interface.
-
-  ibench run    generate predictions for one system under one protocol
-  ibench eval   score a predictions file
-  ibench merge  merge prediction files from parallel shards
-  ibench list   show the registered models, protocols and judges
-
-Run ``ibench <command> --help`` for the options of each command.
-"""
+"""Command line interface."""
 
 from __future__ import annotations
 
@@ -22,7 +14,6 @@ MCQ_KEY = "mcq/mcq_key_v4.jsonl"
 
 
 def parse_kv(pairs: list[str] | None) -> dict:
-    """``key=value`` pairs; values are parsed as JSON when possible, else kept as text."""
     out = {}
     for pair in pairs or []:
         k, sep, v = pair.partition("=")
@@ -45,8 +36,6 @@ def _add_common(p: argparse.ArgumentParser) -> None:
 def _resolve_auto(value: str | None, data: str, rel: str) -> str | None:
     return f"{data}/{rel}" if value == "auto" else value
 
-
-# ------------------------------------------------------------------ run
 
 def add_run_parser(sub) -> None:
     p = sub.add_parser("run", help="generate predictions",
@@ -139,8 +128,6 @@ def cmd_run(args) -> None:
     run_benchmark(cfg)
 
 
-# ------------------------------------------------------------------ eval
-
 def add_eval_parser(sub) -> None:
     p = sub.add_parser("eval", help="score predictions",
                        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -193,8 +180,6 @@ def cmd_eval(args) -> None:
         write_outputs(args.out, agg, records)
         print(f"\nwrote {args.out}/records.jsonl and {args.out}/summary.json")
 
-
-# ------------------------------------------------------------------ merge / list
 
 def add_merge_parser(sub) -> None:
     p = sub.add_parser("merge", help="merge prediction files (first line per item wins)")

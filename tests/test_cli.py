@@ -21,10 +21,9 @@ def test_run_and_eval(bench, tmp_path, capsys):
     assert len(preds) == 4
     by = {f"{p['video_id']}#{p['item_index']}": p for p in preds}
     assert by["vidAAAAAAAA#1"]["n_polls"] == 20 and len(by["vidAAAAAAAA#1"]["emissions"]) == 20
-    assert by["vidAAAAAAAA#0"]["n_polls"] == 6          # A-type: from the reveal to the end
+    assert by["vidAAAAAAAA#0"]["n_polls"] == 6
     assert (out / "raw" / "vidAAAAAAAA#0.json").exists() and (out / "config.json").exists()
 
-    # resumable: a second call adds nothing
     main(["run", "--plugin", str(EXAMPLES / "custom_model.py"), "--model", "scripted:always",
           "--protocol", "sliding", "--blind", "--data", str(bench), "--mcq", "--out", str(out)])
     assert len(_lines(out / "preds.jsonl")) == 4
@@ -48,8 +47,8 @@ def test_silent_system_gets_no_credit_on_positive_items(bench, tmp_path):
     main(["eval", str(out / "preds.jsonl"), "--data", str(bench), "--mcq-key", "--out", str(ev),
           "--plugin", str(EXAMPLES / "custom_judge.py"), "--judge", "exact"])
     recs = {r["item_id"]: r for r in _lines(ev / "records.jsonl")}
-    assert recs["vidBBBBBBBB#1"]["total_score"] == 100.0          # negative item: silence is right
-    assert recs["vidAAAAAAAA#1"]["total_score"] == 0.0            # positive item: silence earns nothing
+    assert recs["vidBBBBBBBB#1"]["total_score"] == 100.0
+    assert recs["vidAAAAAAAA#1"]["total_score"] == 0.0
     assert recs["vidAAAAAAAA#1"]["silence_compliance"] is None
 
 
@@ -78,7 +77,7 @@ def test_items_filter_and_missing_predictions(bench, tmp_path):
     assert len(r) == 1 and r[0]["accuracy"] == 100.0 and r[0]["v_redundant"] == 0
     assert abs(r[0]["timing_accuracy"] - round(100 * (1 + (1 - 0.2 / 5) + 1) / 3, 1)) < 1e-9
     main(["eval", str(preds), "--data", str(bench), "--out", str(ev)])
-    assert len(_lines(ev / "records.jsonl")) == 4                  # missing items scored as silent
+    assert len(_lines(ev / "records.jsonl")) == 4
     main(["eval", str(preds), "--data", str(bench), "--skip-missing", "--out", str(ev)])
     assert len(_lines(ev / "records.jsonl")) == 1
 

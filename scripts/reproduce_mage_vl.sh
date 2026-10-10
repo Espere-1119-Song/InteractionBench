@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
-# Reproduce the Mage-VL default sliding-window InteractionBench evaluation.
-#
-# Environment overrides:
-#   DATA_DIR     benchmark root (default: data/interactionbench)
-#   OUT_DIR      run directory (default: results/runs/mage-vl-sliding-all1060)
-#   ITEMS_FILE   item list (default: benchmark/splits/all1060.txt)
-#   GPUS         comma-separated physical GPU IDs (default: 0)
-#   RUN_MCQ_EVAL set to 0 to skip the mechanical MCQ evaluation
-#   RUN_JUDGE    set to 0 to skip the Qwen3-14B paper-judge evaluation
+# Reproduce the Mage-VL sliding-window evaluation; see docs/MAGE_VL_RESULTS.md.
 
 set -euo pipefail
 
@@ -48,8 +40,6 @@ for ((shard = 0; shard < num_shards; shard++)); do
   log_file="$out_dir/logs/$shard.log"
   echo "launching shard $shard/$num_shards on GPU $gpu -> $log_file"
   (
-    # Mage's nested processor asks once for trust confirmation. The checkpoint
-    # revision itself is pinned in the model-zoo entry.
     set +o pipefail
     yes y | env \
       CUDA_VISIBLE_DEVICES="$gpu" \

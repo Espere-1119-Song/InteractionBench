@@ -1,44 +1,4 @@
-"""Run VideoLLM-online-8B-v1plus over InteractionBench with a chosen trigger threshold.
-
-Variant of ``baselines/videollm_online/run.py`` for the trigger-threshold ablation.
-Differences from ``run.py``:
-  * --threshold (required, in [0, 1]) replaces the upstream value 0.725 of the
-    frame-interval-token gate (``LiveInfer.frame_token_interval_threshold``). After
-    each frame the model stays silent when the probability of the frame-interval
-    token is at least the threshold, so a higher threshold makes the model speak
-    more often.
-  * an item that failed once is recorded as failed (empty emissions) when the same
-    command is started again; ``run.py`` allows three failed attempts.
-  * the threshold is written to config.json.
-
-Upstream: https://github.com/showlab/videollm-online (this script imports
-``demo/inference.py`` and ``data/utils.py`` from a checkout; pass its location with
---repo or the environment variable VLLMONLINE_REPO).
-Checkpoint: LoRA chenjoya/videollm-online-8b-v1plus on the base LLM
-NousResearch/Meta-Llama-3-8B-Instruct (a mirror of meta-llama/Meta-Llama-3-8B-Instruct)
-with the vision encoder google/siglip-large-patch16-384.
-
-Input fps: 8. Each video is resampled once with ffmpeg into a cache directory
-(--cache-dir). The upstream helper calls ``./ffmpeg/ffmpeg`` relative to the working
-directory, so that path must exist where the runner is started.
-
-Environment (versions of the paper run): Python 3.10, torch 2.7.1 (CUDA 12.8),
-torchvision 0.22.1, torchaudio 2.7.1, transformers 4.55.4, peft 0.20.0,
-accelerate 1.14.0, av 12.3.0; see README.md.
-
-Commands used for the paper numbers (threshold ablation on the 103-item subset; run
-directories videollm_threshold0.5_0921 and videollm_threshold0.9_0921):
-  python baselines/videollm_online/run_threshold.py --threshold 0.5 --mcq --fps 8 \
-      --items benchmark/splits/subset103.txt --out results/runs/videollm_threshold0.5
-  python baselines/videollm_online/run_threshold.py --threshold 0.9 --mcq --fps 8 \
-      --items benchmark/splits/subset103.txt --out results/runs/videollm_threshold0.9
-
-Output: <out>/preds.jsonl (one line per item, appended, resumable),
-<out>/raw/<video_id>#<item_index>.json, <out>/config.json and
-<out>/fail_counts.json (number of failed attempts per item).
-Default <out>: results/runs/videollm-online-8b_streaming_<fps>fps[_mcq]; this is the
-default directory of ``run.py`` as well, so pass --out.
-"""
+"""Run VideoLLM-online-8B-v1plus over InteractionBench with a chosen trigger threshold."""
 from __future__ import annotations
 
 import argparse
@@ -135,7 +95,6 @@ def main() -> None:
         "started_at": datetime.now(timezone.utc).isoformat(),
     }, indent=1))
 
-    # LiveInfer parses CLI args itself
     sys.argv = ["run_videollm_online",
                 "--resume_from_checkpoint", args.checkpoint,
                 "--llm_pretrained", args.llm,
@@ -161,9 +120,6 @@ def main() -> None:
         if it.item_id in done:
             continue
         if fail_counts.get(it.item_id, 0) >= 1:
-            # deterministic failure (a very long LCG item trips the stream-token
-            # assertion): record the item as failed so that the run can terminate;
-            # it is scored as silence/miss per protocol
             pred = {"video_id": it.video_id, "item_index": it.item_index,
                     "model": "videollm-online-8b", "run": run_tag,
                     "emissions": [], "n_polls": 0, "poll_latencies": [],

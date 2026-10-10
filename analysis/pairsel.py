@@ -1,66 +1,5 @@
 #!/usr/bin/env python3
-"""PairSel: matched-suite selectivity over the verified near-miss suites.
-
-Each suite j pairs one positive item with one to three near-miss events on the same
-video. A near-miss event is a moment that resembles the target event without
-satisfying the request; it is given as a single timestamp t1 (seconds).
-
-  h+_j = 1  iff the evaluation record of the positive item has timing_accuracy > 0
-            (some event received nonzero timing credit).
-  s-_j = 1  iff the run emits nothing (emissions with non-empty content only, as in
-            the scorer, which drops blank emissions) inside any near-miss window of
-            the suite.
-  PairSel = 100/G * sum_j h+_j * s-_j,   G = suites whose positive item is in the run.
-
-Near-miss windows: t1 is a point, so the primary window is symmetric,
-[t1 - DELTA, t1 + DELTA] with DELTA = 5 s (= MetricConfig.delta_s). Two sensitivity
-variants are also stored: "asym" = [t1 - 1, t1 + 5] and "excl_pos" = the symmetric
-window, ignoring emissions that fall inside a positive response window [r*, r* + DELTA].
-
-Suite file (``--suites``), one JSON object per line. Fields read by this script:
-
-  suite_id           str    identifier of the suite
-  item_id            str    positive item, "<video_id>#<item_index>"
-  positive_windows   list   one object per reference event of the positive item:
-                            earliest_response  float  reference response time r* (s)
-                            evidence           str    reference text; its last number
-                                                      is the running count (strict)
-  near_miss          list   one object per near-miss event:
-                            t1                 float  time of the near miss (s)
-
-Sub-commands:
-
-  score    PairSel of every run found under --runs-root. Timing of the positive item
-           is read from <run>/<eval_name>/records.jsonl; runs named scripted_* fall
-           back to <run>/<fallback_eval_name>/records.jsonl, because their timing does
-           not depend on a judge.
-  strict   event-level variants computed from the output of ``score``. They keep the
-           near-miss condition and tighten the positive one:
-             recall     at least half of the reference events of the positive item
-                        are matched (records n_matched / n_gt);
-             final      nonzero timing credit and the exact final count
-                        (records final_count_abs_err == 0);
-             event      at least half of the reference events receive a matched reply
-                        that states the correct running count; event_all requires
-                        every event. A reply is matched to event n when it is the
-                        first non-empty emission in [r_n - 1, r_{n+1} - 1), the last
-                        window running to the end, and its count is the last number
-                        it states, in digits or in words up to twenty.
-
-Upstream repository or checkpoint: none. Environment: Python >= 3.10; no GPU. This
-script reads files only and does not import the scorer.
-
-Commands used for the paper numbers (evaluations with pre-anchor tolerance 1 s):
-
-  python analysis/pairsel.py score --eval-name eval_judge_pretol1 \
-      --fallback-eval-name eval_nojudge_pretol1 --suffix _pretol1
-  python analysis/pairsel.py strict --pairsel results/analysis/pairsel_pretol1.json
-
-Outputs:
-  <out>/pairsel<suffix>.json     definition, evaluation directories, one entry per run
-                                 with the per-suite rows
-  <out>/pairsel_strict.json      one entry per run with the strict variants
-"""
+"""PairSel: matched-suite selectivity over the verified near-miss suites."""
 
 from __future__ import annotations
 
@@ -87,7 +26,6 @@ def load_suites(path: Path) -> list[dict]:
 
 
 def load_preds(fp: Path) -> dict[str, list[float]]:
-    """item_id -> sorted emission times with non-empty content."""
     out: dict[str, list[float]] = {}
     with fp.open() as f:
         for line in f:
@@ -237,8 +175,6 @@ def cmd_score(args) -> None:
     out.write_text(json.dumps(payload, indent=1, ensure_ascii=False))
     print(f"wrote {out}")
 
-
-# ------------------------------------------------------------------ strict variants
 
 WORDS = {w: i for i, w in enumerate('zero one two three four five six seven eight nine ten eleven twelve '
                                     'thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty'.split())}

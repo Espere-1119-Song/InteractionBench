@@ -1,55 +1,5 @@
 #!/usr/bin/env python3
-"""Setting 3: offline multiple-choice accuracy of a visual agent.
-
-What it does
-  Runs one agent session per multiple-choice item (688 items). The agent receives a
-  video trimmed to the answer cutoff of the item, the question stem and the options,
-  and replies with one option letter. The setting measures the answer content only; it
-  has no decision timing.
-  Answer cutoff: for an item of interaction type INS with timed answers, the time of
-  the first answer plus 2 s; otherwise the maximum of question_time_s and the time of
-  the last answer (the video duration when both are absent). The cutoff is limited to
-  the range [5 s, duration]. The agent therefore cannot see video content after the
-  cutoff. Clips are cut with ffmpeg (libx264, preset veryfast, crf 26, no audio) and
-  cached in <agent-home>/videos_trim/.
-  The reply letter is the last stand-alone option letter in the final 200 characters
-  of the agent output. After the first pass, items without a letter (timeouts, failed
-  tool calls) are run again, in at most 2 further passes.
-  The options shown to the agent come from --mcq (fields item_id, stem, options). The
-  correct letter is read from --mcq-key (field correct_letter) and is used for scoring
-  only; it is never part of a prompt.
-
-Harnesses (--harness)
-  claude   claude -p PROMPT --mcp-config <agent-home>/.mcp.json
-           --allowedTools <seven Qwen-MM-Plugins tools> --model sonnet
-  gemini   gemini -p PROMPT --yolo   (GEMINI_CLI_TRUST_WORKSPACE=true; MCP server and
-           excluded tools come from <agent-home>/.gemini/settings.json)
-  openai   agents/openai_agent.py PROMPT  (OpenAI-compatible tool-calling loop)
-
-Upstream code
-  Qwen-MM-Plugins, https://github.com/QwenLM/Qwen-MM-Plugins (capability "core",
-  started through `uvx`); the path of the checkout is read from QWEN_MM_PLUGINS_ROOT.
-  The checkout used with this script was version 1.0.8 (commit ab339d2).
-
-Environment
-  Python 3.10 or later with the interactionbench package (repository root), ffmpeg
-  with libx264, uv (for uvx), and the CLI of the chosen harness or the variables of
-  agents/openai_agent.py. API keys are read from the environment by the CLI tools
-  themselves (ANTHROPIC_API_KEY, GEMINI_API_KEY).
-
-Command used for the paper (run from the repository root)
-  openai_qwenmm_mcqv4:
-    python agents/run_mcq.py --harness openai --jobs 12 --timeout 420
-  The same command with --harness claude or --harness gemini writes
-  claude_qwenmm_mcqv4 or gemini_qwenmm_mcqv4.
-
-Output
-  <out>/results.jsonl   one line per item: item_id, gt, cutoff_s, letter, raw_tail,
-                        err, wall_s, correct; a rerun skips the items already present
-  <out>/config.json     configuration of the last invocation
-  Default <out>: results/runs/<harness>_qwenmm_mcqv4
-  The accuracy over the answered items is printed at the end.
-"""
+"""Setting 3: offline multiple-choice accuracy of a visual agent."""
 import argparse
 import hashlib
 import json
@@ -63,8 +13,6 @@ from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-# Set in main(): HE is the agent home directory (working directory of the agent
-# sessions), VID the directory of the H.264 videos, TRIM the directory of cached clips.
 HE = VID = TRIM = ""
 LETTERS = "ABCDEF"
 
@@ -74,8 +22,6 @@ CLAUDE_TOOLS = ",".join(
 
 
 def load_items(subset, data, mcq_path, key_path):
-    """Multiple-choice items in the order of the options file, with the annotation
-    fields the cutoff needs and the correct letter from the key file."""
     from interactionbench.data import iter_items, load_benchmark
     from interactionbench.mcq import load_mcq_options
     keep = {l.strip() for l in open(subset) if l.strip()}
@@ -201,8 +147,6 @@ def main():
     sys.path.insert(0, HERE)
     from common import capability_roundrobin, check_agent_setup
 
-    # Absolute paths: the agent runs in <agent-home> and receives the clip path in
-    # the prompt.
     HE = os.path.abspath(args.agent_home)
     VID = os.path.abspath(args.video_dir or f"{args.data}/videos_h264")
     TRIM = f"{HE}/videos_trim"
@@ -271,7 +215,6 @@ def main():
     with ThreadPoolExecutor(max_workers=args.jobs) as ex:
         list(ex.map(work, todo))
 
-    # unanswered items (tool-call failures, timeouts) get up to 2 retry passes
     for rp in range(2):
         rows = [json.loads(l) for l in open(res_fp)]
         bad = {r["item_id"] for r in rows

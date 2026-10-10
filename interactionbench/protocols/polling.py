@@ -1,27 +1,4 @@
-"""Fixed-interval polling: make a turn-based model act as a real-time system.
-
-At each tick the protocol exposes the visual context available "as of now" and asks
-SPEAK or WAIT. The poll interval is the best timing resolution the system can reach.
-
-Tick schedule
-  time_type A    The question is NOT revealed before ``question_time_s`` (revealing it
-                 earlier would leak a retrospective-memory task). The first poll is at
-                 the reveal moment, then every ``interval`` seconds for ``a_window``
-                 seconds or until the video ends.
-  time_type B/C  The question is a standing request from t=0. Poll every ``interval``
-                 seconds until the video ends.
-
-Context regimes
-  sliding      the most recent ``max_frames`` frames up to t. Each poll is an
-               independent conversation. Constant cost; nothing older than the window
-               is visible.
-  cumulative   all frames 0..t, evenly subsampled to ``max_frames``. Each poll is
-               independent; old detail thins out as the stream grows.
-  interleaved  one growing conversation. Each poll appends the new frames since the
-               previous poll plus a short nudge, and the model's reply stays in the
-               context, so the model sees what it already said. Images in context are
-               capped at ``max_frames`` by dropping the oldest, keeping all text turns.
-"""
+"""Fixed-interval polling: make a turn-based model act as a real-time system."""
 
 from __future__ import annotations
 
@@ -35,7 +12,6 @@ from .base import Protocol, ProtocolConfig, make_poll, user_turn
 
 
 def poll_ticks(item: BenchItem, interval: float, a_window: float) -> list[float]:
-    """Decision times for one item."""
     ticks: list[float] = []
     if item.time_type == "A":
         q_t = item.question_time_s
@@ -53,7 +29,6 @@ def poll_ticks(item: BenchItem, interval: float, a_window: float) -> list[float]
 
 
 def trim_context_images(messages: list[dict], cap: int) -> None:
-    """Drop the oldest image items in place so that at most ``cap`` remain."""
     total = len(collect_images(messages))
     if total <= cap:
         return
@@ -74,8 +49,6 @@ def trim_context_images(messages: list[dict], cap: int) -> None:
 
 
 class PollingProtocol(Protocol):
-    """Shared tick loop. Subclasses choose the context regime through ``mode``."""
-
     mode = "sliding"
 
     def run_item(self, model: ChatModel, frames: list[Frame], item: BenchItem,
@@ -108,7 +81,7 @@ class PollingProtocol(Protocol):
                 messages = [{"role": "system", "content": SYSTEM},
                             user_turn(window, template.format(
                                 t=t, question=question, hint=hint, fmt=FORMAT))]
-            else:  # interleaved
+            else:
                 new = [f for f in history if prev_t < f.time <= t] or history[-1:]
                 new = subsample(new, cfg.max_new_per_turn)
                 convo.append(user_turn(new, INTERLEAVED_TURN.format(t=t)))

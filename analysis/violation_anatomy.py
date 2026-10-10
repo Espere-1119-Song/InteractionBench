@@ -1,38 +1,5 @@
 #!/usr/bin/env python3
-"""Aggregations over per-item evaluation records: violation anatomy and the per-task table.
-
-Part 1, violation anatomy. For every run in ``--runs`` the records of one evaluation
-are reduced to:
-
-  prem, redun, spur  mean over positive items of (premature / redundant / spurious
-                     emissions) divided by max(number of reference events, 1)
-  neg_fa             share of negative items with silence compliance below 100
-  TA, SC             mean timing accuracy and silence compliance over positive items
-                     (items where the value is undefined are left out)
-  rtf, epm, lat      mean realtime factor, emissions per minute, mean poll latency
-  ord_hit            for trigger and counting items: share of items with at least one
-                     matched event, grouped by min(item index within the video, 2)
-  dom                the largest of prem / redun / spur
-
-Part 2, per-task table rows. For every run in ``--table-runs`` one LaTeX row with the
-overall total followed by accuracy, timing accuracy and silence compliance of the
-tasks PTR, TOA, CST, IVQA, LCG, LVM (in this order), read from ``by_capability`` of
-summary.json. Runs without predictions are left out.
-
-An evaluation directory that does not exist is created by scoring the predictions of
-the run without a judge (``--pre-tol`` is passed to the evaluator).
-
-Upstream repository or checkpoint: none. Environment: Python >= 3.10 and the
-``interactionbench`` package; no GPU.
-
-Command used for the paper numbers (pre-anchor tolerance 1 s):
-
-  python analysis/violation_anatomy.py --pre-tol 1.0 --suffix _pretol1
-
-Outputs:
-  <out>/violation_anatomy<suffix>.json
-  <out>/fullcap_rows<suffix>.tex
-"""
+"""Aggregations over per-item evaluation records: violation anatomy and the per-task table."""
 
 from __future__ import annotations
 
@@ -88,13 +55,11 @@ def anatomy(recs: list[dict]) -> dict:
          "rtf": st.mean(r["realtime_factor"] for r in recs if r.get("realtime_factor") is not None) if any(r.get("realtime_factor") is not None for r in recs) else None,
          "epm": st.mean(r["emissions_per_min"] for r in recs if r.get("emissions_per_min") is not None),
          "lat": st.mean(r["poll_latency_mean"] for r in recs if r.get("poll_latency_mean") is not None) if any(r.get("poll_latency_mean") is not None for r in recs) else None}
-    # ordinal hit rate (timed families only)
     byord = collections.defaultdict(list)
     for r in pos:
         if r["family"] in ("B_trigger", "C_counting"):
             byord[min(int(r["item_id"].split("#")[1]), 2)].append(1.0 if r["n_matched"] > 0 else 0.0)
     a["ord_hit"] = {k: round(st.mean(v), 3) for k, v in sorted(byord.items())}
-    # dominant violation share
     tot = a["prem"] + a["redun"] + a["spur"]
     a["dom"] = max(("premature", a["prem"]), ("redundant", a["redun"]), ("spurious", a["spur"]), key=lambda x: x[1])[0] if tot else None
     return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in a.items()}
@@ -124,7 +89,6 @@ def main() -> None:
     evd = args.eval_name or f"{EVAL_NOJUDGE}{args.suffix}"
     root = args.runs_root
 
-    # ---- record aggregations over chosen runs
     agg = {}
     for name, run in parse_runs(args.runs, RUNS):
         fp = f"{root}/{run}/{evd}/records.jsonl"
@@ -136,7 +100,6 @@ def main() -> None:
     json.dump(agg, open(f"{args.out}/violation_anatomy{args.suffix}.json", "w"), indent=1)
     print("anatomy:", json.dumps(agg, indent=1))
 
-    # ---- full per-capability table
     lines = []
     for name, run in parse_runs(args.table_runs, FULLRUNS):
         fp = f"{root}/{run}/{evd}/summary.json"

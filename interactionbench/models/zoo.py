@@ -1,17 +1,8 @@
-"""Built-in model configurations.
-
-Each entry names an ``adapter`` (see ``interactionbench.models.ADAPTERS``) and the
-keyword arguments passed to it. Entries marked "paper" are the configurations used
-for the numbers in the paper; keep them unchanged when reproducing.
-
-Add your own entry at run time with ``register_model`` or ``--model-config file.json``
-instead of editing this file.
-"""
+"""Built-in model configurations."""
 
 from __future__ import annotations
 
 MODEL_ZOO: dict[str, dict] = {
-    # ---- open-weight vision-language models (paper) ------------------------
     "qwen3vl-8b": {
         "adapter": "hf-vlm",
         "repo": "Qwen/Qwen3-VL-8B-Instruct",
@@ -43,31 +34,28 @@ MODEL_ZOO: dict[str, dict] = {
         "model_cls": "AutoModelForImageTextToText",
         "image_style": "placeholder",
     },
-    # ---- omni models, evaluated vision-only (paper) ------------------------
     "qwen3-omni-30b": {
         "adapter": "hf-vlm",
         "repo": "Qwen/Qwen3-Omni-30B-A3B-Instruct",
-        "model_cls": "Qwen3OmniMoeThinkerForConditionalGeneration",  # thinker only: text out
+        "model_cls": "Qwen3OmniMoeThinkerForConditionalGeneration",
         "image_style": "payload",
     },
     "qwen2.5-omni-7b": {
         "adapter": "hf-vlm",
         "repo": "Qwen/Qwen2.5-Omni-7B",
-        "model_cls": "Qwen2_5OmniThinkerForConditionalGeneration",   # thinker only: text out
+        "model_cls": "Qwen2_5OmniThinkerForConditionalGeneration",
         "image_style": "payload",
     },
     "minicpm-o-4.5": {
-        "adapter": "minicpmo",          # custom model.chat() API; needs transformers 4.51
+        "adapter": "minicpmo",
         "repo": "openbmb/MiniCPM-o-4_5",
         "from_pretrained_kwargs": {"init_audio": False, "init_tts": False},
     },
-    # ---- text-only language model, run with --blind (paper) ----------------
     "qwen3-8b-text": {
         "adapter": "hf-text",
         "repo": "Qwen/Qwen3-8B",
         "chat_template_kwargs": {"enable_thinking": False},
     },
-    # ---- further open-weight models (configured, not in the paper tables) --
     "mage-vl-4b": {
         "adapter": "hf-vlm",
         "repo": "microsoft/Mage-VL",
@@ -75,8 +63,6 @@ MODEL_ZOO: dict[str, dict] = {
         "image_style": "placeholder",
         "trust_remote_code": True,
         "revision": "d88b153285f1633a61b2f693c59c8576693af185",
-        # Mage-VL requires transformers >= 5.7.  SDPA avoids making flash-attn a
-        # requirement for the frame-sampled InteractionBench protocol.
         "attn_implementation": "sdpa",
     },
     "videochat3-4b": {
@@ -118,12 +104,9 @@ MODEL_ZOO: dict[str, dict] = {
         "attn_implementation": "eager",
         "drop_input_keys": ["num_patches", "num_tokens", "imgs_sizes"],
     },
-    # ---- API models (OpenAI-compatible endpoints) --------------------------
-    # The key is read from the named environment variable. Override the model with
-    # --model-arg model=<name> and the endpoint with --api-base.
     "openai-api": {
         "adapter": "api",
-        "model": None,                      # set with --model-arg model=... or IBENCH_API_MODEL
+        "model": None,
         "base_url": "https://api.openai.com/v1",
         "api_key_env": "OPENAI_API_KEY",
     },
@@ -135,11 +118,10 @@ MODEL_ZOO: dict[str, dict] = {
     },
     "gemini-api": {
         "adapter": "api",
-        "model": None,                      # e.g. --model-arg model=gemini-3.5-flash
+        "model": None,
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "api_key_env": "GOOGLE_API_KEY",
         "max_tokens_field": "max_tokens",
-        # thinking would consume the token budget and produce empty replies
         "extra_body": {"reasoning_effort": "none"},
     },
 }

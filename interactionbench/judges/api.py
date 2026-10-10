@@ -12,13 +12,6 @@ from .base import DEFAULT_PROMPT_VERSION, CachedJudge
 
 
 class APIJudge(CachedJudge):
-    """
-    Endpoint and key resolution, first match wins:
-      base_url: argument, IBENCH_JUDGE_BASE_URL, OPENAI_BASE_URL, https://api.openai.com/v1
-      key:      environment variable named by ``api_key_env`` (default
-                IBENCH_JUDGE_API_KEY), then OPENAI_API_KEY
-    """
-
     def __init__(self, model: str, base_url: str | None = None,
                  api_key_env: str = "IBENCH_JUDGE_API_KEY", cache_path=None,
                  prompt_version: str = DEFAULT_PROMPT_VERSION,
@@ -31,8 +24,6 @@ class APIJudge(CachedJudge):
                          or os.environ.get("OPENAI_BASE_URL")
                          or "https://api.openai.com/v1").rstrip("/")
         self.api_key = os.environ.get(api_key_env) or os.environ.get("OPENAI_API_KEY", "")
-        # Thinking models spend budget on reasoning before the visible answer, so a
-        # small max_tokens returns empty output.
         self.max_tokens = max_tokens
         self.reasoning_effort = reasoning_effort or os.environ.get("IBENCH_JUDGE_REASONING_EFFORT")
         self.timeout_s = timeout_s

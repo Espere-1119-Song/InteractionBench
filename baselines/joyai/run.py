@@ -1,39 +1,4 @@
-"""Run the JoyAI-VL-Interaction streaming system over InteractionBench.
-
-Drives the live adapter natively: one server-side session per item, only the NEW
-frames are pushed at each tick, and JoyAI's own memory and silence decision run on
-the server. Writes the same predictions .jsonl as ``ibench run``.
-
-Per-item protocol (mirrors the polling protocols of ``ibench run``):
-  time_type A   The question is withheld until question_time_s. History frames
-                0..q_t are ingested first in placeholder chunks (outputs
-                discarded; the model is told to just watch); then the real
-                question is asked and polling continues for --a-window seconds.
-  time_type B/C The standing question is sent with every tick's new frames
-                from t=0 (JoyAI also keeps it persistent on the server).
-
-Upstream: https://github.com/jd-opensource/JoyAI-VL-Interaction
-Checkpoint: jdopensource/JoyAI-VL-Interaction-Preview (summarizer and long-term
-memory model: Qwen/Qwen3-VL-4B-Instruct).
-
-Prerequisite: the JoyAI stack is up (main vLLM server, summarizer vLLM server, live
-adapter); start it with ``baselines/joyai/serve.sh``. The default ports are 7060
-(main), 8065 (summarizer) and 8070 (adapter).
-
-Environment of this runner: Python >= 3.10, Pillow, an ``ffmpeg`` binary on PATH, and
-the ``interactionbench`` package. The serving stack used vllm 0.28.0 (torch 2.13.0,
-transformers 5.16.0, openai 3.3.1, aiohttp 3.14.3); see README.md.
-
-Command used for the paper numbers (run directory joyai_streaming_4fps_mcqv4):
-  python baselines/joyai/run.py --sample-fps 4 --max-long-side 448 \
-      --mcq data/interactionbench/mcq/mcq_options_v4.jsonl \
-      --video-dir data/interactionbench/videos_h264 \
-      --out results/runs/joyai_streaming_4fps_mcqv4
-
-Output: <out>/preds.jsonl (one line per item, appended, resumable) and
-<out>/raw/<video_id>#<item_index>.json (every tick including the silent ones).
-Default <out>: results/runs/<model-key>_streaming_iv<interval>[_mcq].
-"""
+"""Run the JoyAI-VL-Interaction streaming system over InteractionBench."""
 
 from __future__ import annotations
 
@@ -49,13 +14,6 @@ WATCH_PLACEHOLDER = "(No request yet. Keep watching silently.)"
 
 
 def capability_roundrobin(items, cap=None, iid=None):
-    """Capability-interleaved item ordering.
-
-    A run can stop at any moment; plain per-video order would spend the whole time
-    budget on whichever capability sorts first. Round-robin across capabilities makes
-    adjacent items differ in task type, so every capability accumulates coverage at
-    the same rate. Deterministic: groups are sorted by capability name, each group is
-    pre-sorted by item id."""
     cap = cap or (lambda it: it.get("capability") or "?")
     iid = iid or (lambda it: it.get("item_id") or "")
     groups: dict[str, list] = {}
@@ -85,13 +43,10 @@ def stream_item(item, frames, *, interval: float, a_window: float,
     if item.time_type == "A":
         q_t = item.question_time_s
         history = frames_up_to(frames, q_t)
-        # ingest history in chunks; discard outputs (placeholder standing text).
-        # Hold back the final frame so the question step still carries a frame.
         held = history[-1:] if history else []
         body = history[:-1]
         for i in range(0, len(body), ingest_chunk):
             sess.step(body[i:i + ingest_chunk], WATCH_PLACEHOLDER, max_new_tokens=8)
-        # now reveal the question and poll until the window closes
         t_end = min(item.duration_s, q_t + a_window)
         t, prev = q_t, q_t
         first = True
@@ -223,8 +178,6 @@ def main() -> None:
                                 base=args.base, model=args.served_model,
                                 options=mcq.get(it.item_id), verbose=args.verbose)
         except Exception as e:
-            # A failed item writes no prediction line, so it is attempted again when
-            # the same command is re-run.
             print(f"  ERROR {it.item_id}: {e}", flush=True)
             continue
         pred = {"video_id": it.video_id, "item_index": it.item_index,

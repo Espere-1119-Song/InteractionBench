@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the benchmark data directory.
-
-  download   fetch annotations, videos and multiple-choice files from the Hugging Face Hub
-  h264       build H.264 proxies for videos in other codecs (AV1, HEVC)
-  check      report what is present and what is missing
-
-Expected layout afterwards:
-
-  <data>/annotations/<domain>/<video_id>.json
-  <data>/videos/<domain>/<video_id>.mp4
-  <data>/videos_h264/<video_id>.mp4          (optional, from `h264`)
-  <data>/mcq/mcq_options_v4.jsonl
-  <data>/mcq/mcq_key_v4.jsonl
-  <data>/items.jsonl                         (all items in one table, not read by the code)
-"""
+"""Prepare the benchmark data directory."""
 
 from __future__ import annotations
 

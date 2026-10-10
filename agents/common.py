@@ -1,17 +1,4 @@
-"""Helpers shared by the agent-harness runners (run_polling.py, run_grounding.py,
-run_mcq.py).
-
-capability_roundrobin
-    Deterministic job order. Items are sorted by item id, grouped by capability, and the
-    groups (sorted by capability name) are visited in turn. A run that stops early, for
-    example at a spending limit, has therefore covered every capability at the same rate.
-    The order changes scheduling only; it does not change any prompt or prediction.
-
-check_agent_setup
-    Stops the run before the first agent session when the agent home directory or the
-    environment is incomplete. Without this check every session would fail and every
-    item would be recorded as silent.
-"""
+"""Helpers shared by the agent-harness runners (run_polling.py, run_grounding.py, run_mcq.py)."""
 from __future__ import annotations
 
 import os
@@ -35,7 +22,6 @@ def capability_roundrobin(items, cap=None, iid=None):
 
 
 def check_agent_setup(harness, agent_home, mcp=True):
-    """Exit with a message when a file or variable the harness needs is missing."""
     problems = []
     if harness == "claude" and mcp and not os.path.exists(f"{agent_home}/.mcp.json"):
         problems.append(f"{agent_home}/.mcp.json not found "

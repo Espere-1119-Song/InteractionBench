@@ -1,11 +1,4 @@
-"""Multiple-choice rendering and scoring.
-
-Two files describe the multiple-choice cast of the discrete-answer items:
-
-  mcq_options.jsonl   {"item_id", "stem", "options": [...]}          shown to the system
-  mcq_key.jsonl       {"item_id", "correct_index", "answer_text",
-                       "distractors": [...]}                          never shown to the system
-"""
+"""Multiple-choice rendering and scoring."""
 
 from __future__ import annotations
 
@@ -28,10 +21,6 @@ def load_mcq_options(path: str | Path) -> dict[str, dict]:
 
 
 def make_mcq_scorer(options: list[str], correct_index: int):
-    """Per-item content scorer: 1.0 iff the prediction picks the correct option.
-
-    Accepts a bare letter ('B', 'b.', 'Answer: B', '(B)') or the option text itself
-    (best token-F1 against the options, which must win by a clear margin)."""
     letters = LETTERS[: len(options)]
     letter_re = re.compile(rf"(?:^|[^a-z0-9])([{letters}{letters.lower()}])(?:[^a-z0-9]|$)")
 
@@ -47,7 +36,6 @@ def make_mcq_scorer(options: list[str], correct_index: int):
         if sims[best] >= 0.5 and sims[best] > max(
                 (s for i, s in enumerate(sims) if i != best), default=0.0):
             return 1.0 if best == correct_index else 0.0
-        # exact containment fallback
         pn = normalize_text(p)
         hits = [i for i, o in enumerate(options) if normalize_text(o) and normalize_text(o) in pn]
         if len(hits) == 1:
@@ -58,7 +46,6 @@ def make_mcq_scorer(options: list[str], correct_index: int):
 
 
 def load_mcq_scorers(path: str | Path) -> dict[str, object]:
-    """item_id -> scorer, built from the answer key."""
     scorers = {}
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         if line.strip():

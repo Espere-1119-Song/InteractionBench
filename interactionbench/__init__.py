@@ -1,15 +1,4 @@
-"""InteractionBench: a real-time interaction benchmark for streaming video systems.
-
-Public API (everything else is implementation detail):
-
-    from interactionbench import (
-        load_benchmark, iter_items,          # dataset
-        build_model, register_model, register_adapter, ChatModel,   # systems under test
-        make_judge, register_judge,          # content judges
-        get_protocol, register_protocol, Protocol,                  # test methods
-        MetricConfig, score_item, aggregate, # scoring
-    )
-"""
+"""InteractionBench: a real-time interaction benchmark for streaming video systems."""
 
 __version__ = "1.0.0"
 
