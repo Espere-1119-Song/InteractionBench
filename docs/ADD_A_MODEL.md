@@ -121,7 +121,7 @@ ibench eval my_preds.jsonl --mcq-key --judge hf:Qwen/Qwen3-14B
 ```
 
 Template: [examples/write_predictions.py](../examples/write_predictions.py). Complete
-runners for nine streaming systems are in [baselines/](../baselines).
+runners for streaming systems are in [baselines/](../baselines).
 
 Requirements for a comparable result:
 
