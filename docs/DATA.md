@@ -12,6 +12,7 @@ It contains the videos, the questions and the ground truth.
   items.jsonl                              all items in one table (not read by the code)
   mcq/mcq_options_v4.jsonl                 shown to the system
   mcq/mcq_key_v4.jsonl                     answer key, used by the scorer only
+  suites/nearmiss_verified.jsonl           53 near-miss suites, read by analysis/pairsel.py
   videos/<domain>/<video_id>.mp4
   videos_h264/<video_id>.mp4               optional H.264 proxies, built locally
 ```

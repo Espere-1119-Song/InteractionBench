@@ -19,7 +19,7 @@ _YT_ID = re.compile(r"\[([A-Za-z0-9_-]{11})\]$")
 
 def cmd_download(args) -> None:
     from huggingface_hub import snapshot_download
-    patterns = ["README.md", "items.jsonl", "annotations/**", "mcq/**"]
+    patterns = ["README.md", "items.jsonl", "annotations/**", "mcq/**", "suites/**"]
     if not args.no_videos:
         patterns.append("videos/**")
     snapshot_download(args.repo, repo_type="dataset", local_dir=args.data,

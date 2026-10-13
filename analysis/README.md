@@ -108,8 +108,31 @@ Purpose: matched-suite selectivity (PairSel). A suite passes when its positive i
 earns timing credit and the run emits nothing near any near-miss event of the suite.
 
 Inputs: the suite file (`--suites`, default `<data>/suites/nearmiss_verified.jsonl`,
-schema in the docstring of the script), `preds.jsonl` and judged records of every run
-under `--runs-root` (several roots may be given).
+downloaded with the dataset), `preds.jsonl` and judged records of every run under
+`--runs-root` (several roots may be given).
+
+Each suite pairs one positive Track item with one to three near-miss events on the same
+video: moments that resemble a counted event but do not satisfy the request. A suite
+passes when the positive item has `timing_accuracy > 0` and the run emits nothing
+non-empty within 5 s of any near-miss time `t1`. PairSel is the share of passing suites
+among those whose positive item is in the run. Two variants are stored as well: the
+asymmetric window `[t1 - 1, t1 + 5]`, and the symmetric window ignoring emissions inside
+a positive response window `[r*, r* + 5]`.
+
+One suite per line of the suite file:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `suite_id`, `item_id`, `video_id` | string | the positive item, `<video_id>#<item_index>` |
+| `task_category` | string | task of the positive item (all `CST`, shown as Track) |
+| `request` | string | instruction of the positive item |
+| `positive_windows` | list | one object per reference event: `earliest_response` (r*, s), `evidence` (reference text; its last number is the running count) |
+| `near_miss` | list | one object per near-miss event: `t1` (s), `description`, `why_not` |
+
+`strict` keeps the near-miss condition and tightens the positive one: `recall` needs at
+least half of the reference events matched, `final` needs the exact final count, and
+`event` / `event_all` need half / all reference events answered with the correct running
+count.
 
 ```
 python analysis/pairsel.py score --eval-name eval_judge_pretol1 \
@@ -207,7 +230,7 @@ Purpose: the human reference. Conversion of the export of the annotation tool,
 scoring variants, and the comparison with systems on the same items. The human run is
 named `human_reference`.
 
-Allowances of the human protocol (each stated with its value in the docstring):
+Allowances of the human protocol:
 multiple choice graded by option text; A-type emissions shifted back by the measured
 reaction latency of 2.48 s; optional unbounded pre-anchor tolerance (`--pre-tol inf`).
 The human reference of the paper uses the first two with a pre-anchor tolerance of
