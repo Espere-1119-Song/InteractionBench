@@ -16,6 +16,7 @@ ibench eval <out>/preds.jsonl --mcq-key --judge hf:Qwen/Qwen3-14B --out <out>/ev
 | `videollm_online/` | VideoLLM-online | native streaming with its trigger threshold | `videollm-online-8b_streaming_8fps_mcq` |
 | `flash_vstream/` | Flash-VStream | streaming encoder, polled once per second | `fvstream-7b_polling_iv1_8fps_mcq_lenientparse` |
 | `videochat3/` | VideoChat3 | native streaming rounds | `videochat3-4b_streaming_iv1_mcq` |
+| [onestreamer/](onestreamer/README.md) | OneStreamer-4B | native streaming rounds | Additional baseline; see its README |
 | `moss/` | MOSS-Video | native real-time generation | `moss-video-preview_streaming_rt_mcq` |
 | `livecc/` | LiveCC | streaming commentary | `livecc-7b_streaming_iv1_mcq` |
 | `dispider/` | Dispider | offline temporal grounding | `dispider_offline_mcq` |
