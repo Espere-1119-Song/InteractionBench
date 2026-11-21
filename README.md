@@ -4,7 +4,7 @@ Evaluation code for **InteractionBench: A Real-Time Interaction Benchmark for St
 
 <p align="left">
   <a href="https://github.com/Espere-1119-Song/InteractionBench"><img src="https://img.shields.io/badge/Code-GitHub-181717?logo=github&logoColor=white" alt="Code (GitHub)"></a>
-  <a href="https://huggingface.co/datasets/InteractionBench/InteractionBench"><img src="https://img.shields.io/badge/Dataset-Hugging%20Face-FFD21E?logo=huggingface&logoColor=black" alt="Dataset (Hugging Face)"></a>
+  <a href="https://huggingface.co/datasets/InteractionBench/InteractionBench"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-Hugging%20Face-FF9D00" alt="Dataset (Hugging Face)"></a>
   <a href="https://www.enxinsong.com/blog/interactionbench/"><img src="https://img.shields.io/badge/Blog-InteractionBench-blue" alt="Blog"></a>
   <a href="https://arxiv.org/abs/2610.05775"><img src="https://img.shields.io/badge/arXiv-2610.05775-b31b1b?logo=arxiv&logoColor=white" alt="arXiv"></a>
 </p>
