@@ -2,10 +2,14 @@
 
 Evaluation code for **InteractionBench: A Real-Time Interaction Benchmark for Streaming Video Systems**.
 
+Enxin Song\*, Suhao Yu\*, Yifei Xu\*, Barbara Su, Weili Xu, Wenhao Chai, Yao Tang, Jie Deng, Haiyang Xu, Jiatao Gu
+
+\* Equal contribution
+
 [Code (GitHub)](https://github.com/Espere-1119-Song/InteractionBench) ·
 [Dataset (Hugging Face)](https://huggingface.co/datasets/InteractionBench/InteractionBench) ·
-[Blog](https://www.enxinsong.com/blog/interactionbench/) ·
-arXiv (to be added)
+[Project page](https://www.enxinsong.com/projects/interactionbench/) ·
+[arXiv](https://arxiv.org/abs/2610.05775)
 
 A real-time interaction system watches a video stream and decides, at every moment,
 whether to speak or to stay silent. InteractionBench scores three things per item:
